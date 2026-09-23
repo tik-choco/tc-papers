@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { ArrowLeft, Check, Copy, FileText, Lightbulb, RotateCw, Send, Sparkles, X } from 'lucide-preact'
+import { ArrowLeft, Check, Copy, FileText, Languages, Lightbulb, RotateCw, Send, Sparkles, X } from 'lucide-preact'
 import type { Paper, StudyPoint } from '../types'
 import type { Copy as CopyText, Locale } from '../copy'
 import { chatJson } from '../lib/ai'
 import { getPdf } from '../lib/pdf'
 import { loadPapers, patchPaper } from '../lib/store'
-import { ANSWER_SCHEMA, STORY_REMINDER, STORY_SCHEMA, applyAnswer, askMessage, askPrompt, parseStory, storyPrompt, studyToMarkdown } from '../lib/study'
+import { ANSWER_SCHEMA, STORY_SCHEMA, STUDY_LANGS, TRANSLATION_SCHEMA, applyAnswer, applyTranslation, askMessage, askPrompt, loadStudyLang, parseStory, saveStudyLang, storyPrompt, storyReminder, studyTexts, studyToMarkdown, translatePrompt, type StudyLang } from '../lib/study'
 import { StoryGraph } from './StoryGraph'
 import { PdfPane, type PdfSelection, type PdfTarget } from './PdfPane'
 
@@ -47,6 +47,7 @@ export function StudyView({ paper, t, locale, onBack, onMode }: { paper: Paper; 
   const [showPdf, setShowPdf] = useState(() => typeof matchMedia === 'undefined' || matchMedia('(min-width: 960px)').matches)
   const [confirming, setConfirming] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [lang, setLang] = useState(() => loadStudyLang(locale))
   const input = useRef<HTMLTextAreaElement>(null)
   const treeRef = useRef<HTMLDivElement>(null)
   const scanned = Boolean(paper.scan) && !['queued', 'scanning'].includes(paper.state)
@@ -78,8 +79,8 @@ export function StudyView({ paper, t, locale, onBack, onMode }: { paper: Paper; 
 
   const build = () => run(true, async onText => {
     const text = await paperText()
-    const next = await chatJson('study', [{ role: 'system', content: storyPrompt(locale) }, { role: 'user', content: 'Paper text:\n' + text + '\n\n' + STORY_REMINDER }], STORY_SCHEMA, parseStory, onText)
-    patchPaper(paper.id, { study: next })
+    const next = await chatJson('study', [{ role: 'system', content: storyPrompt(lang) }, { role: 'user', content: 'Paper text:\n' + text + '\n\n' + storyReminder(lang) }], STORY_SCHEMA, parseStory, onText)
+    patchPaper(paper.id, { study: { ...next, lang } })
     setSelected(next.nodes[0]!.id); setFresh({ node: '', points: new Set() }); setConfirming(false)
   })
 
@@ -92,9 +93,9 @@ export function StudyView({ paper, t, locale, onBack, onMode }: { paper: Paper; 
     const record = (model: string) => ({ text, askedAt: new Date().toISOString(), model, ...(selection ? { selection: selection.text.slice(0, 500) } : {}) })
     // Parsing against the current tree validates the reply (and triggers the repair retry if needed).
     const { raw, model } = await chatJson('study', [
-      { role: 'system', content: askPrompt(locale) },
+      { role: 'system', content: askPrompt(lang) },
       // Paper first so the long, unchanging prefix can be cached by the provider between questions.
-      { role: 'user', content: 'Paper text:\n' + paperBody + '\n\n' + askMessage(current, text, focus, selection || undefined) },
+      { role: 'user', content: 'Paper text:\n' + paperBody + '\n\n' + askMessage(current, text, focus, selection || undefined, lang) },
     ], ANSWER_SCHEMA, (raw, model) => { applyAnswer(current, raw, record(model), focus?.id); return { raw, model } }, onText)
     // Re-read: another tab may have added to the tree while the model was answering.
     const latest = loadPapers().find(p => p.id === paper.id)?.study || current
@@ -104,6 +105,21 @@ export function StudyView({ paper, t, locale, onBack, onMode }: { paper: Paper; 
     setQuestion(''); setSelection(null)
   })
 
+  // Translates the graph, tree and questions in place, so switching language never costs the reader's notes.
+  const translate = () => run(false, async onText => {
+    const current = loadPapers().find(p => p.id === paper.id)?.study
+    if (!current) return
+    const { raw } = await chatJson('study', [{ role: 'system', content: translatePrompt(lang) }, { role: 'user', content: JSON.stringify(studyTexts(current)) }],
+      TRANSLATION_SCHEMA, raw => { applyTranslation(current, raw, lang); return { raw } }, onText)
+    const latest = loadPapers().find(p => p.id === paper.id)?.study || current
+    patchPaper(paper.id, { study: applyTranslation(latest, raw, lang) })
+  })
+
+  function chooseLang(value: StudyLang) {
+    setLang(value)
+    saveStudyLang(value)
+  }
+
   function onSelectText(value: PdfSelection) {
     setSelection(value)
     input.current?.focus()
@@ -112,6 +128,8 @@ export function StudyView({ paper, t, locale, onBack, onMode }: { paper: Paper; 
   const focus = study?.nodes.find(n => n.id === selected)
   const questions = new Map(study?.questions.map((q, i) => [q.id, { n: i + 1, text: q.text }]) || [])
   const canAsk = !busy && (question.trim() || selection)
+  // Studies made before the language setting were written in the UI language.
+  const storyLang = study?.lang ?? locale
 
   return <article class={`study ${showPdf ? 'with-pdf' : ''}`}>
     {showPdf && <PdfPane paperId={paper.id} target={target} onSelect={onSelectText} t={t} />}
@@ -120,6 +138,12 @@ export function StudyView({ paper, t, locale, onBack, onMode }: { paper: Paper; 
         <button class="ghost" onClick={onBack}><ArrowLeft size={16} />{t.back}</button>
         <ModeTabs mode="study" t={t} onMode={onMode} />
         <div class="actions">
+          <label class="ghost lang-select" title={t.study.language}>
+            <Languages size={15} />
+            <select aria-label={t.study.language} value={lang} onChange={e => chooseLang(e.currentTarget.value as StudyLang)}>
+              {(Object.keys(STUDY_LANGS) as StudyLang[]).map(key => <option key={key} value={key}>{STUDY_LANGS[key].label}</option>)}
+            </select>
+          </label>
           <button class="ghost" aria-pressed={showPdf} onClick={() => setShowPdf(v => !v)}><FileText size={15} />{showPdf ? t.study.hidePdf : t.study.showPdf}</button>
           {study && <button class="ghost" onClick={() => { void navigator.clipboard.writeText(studyToMarkdown(paper.title, study, t.study.kinds)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) }) }}>{copied ? <Check size={15} /> : <Copy size={15} />}{copied ? t.copied : t.study.copy}</button>}
           {study && <button class={`ghost ${confirming ? 'danger confirming' : ''}`} disabled={Boolean(busy)} onClick={() => confirming ? void build() : setConfirming(true)} onBlur={() => setConfirming(false)}><RotateCw size={15} />{confirming ? t.study.confirmRebuild : t.study.rebuild}</button>}
@@ -137,7 +161,11 @@ export function StudyView({ paper, t, locale, onBack, onMode }: { paper: Paper; 
         </button> : <p class="muted">{t.study.notReady}</p>}
         {busy && <p class="muted small">{t.study.thinking(busy.chars)}</p>}
       </section> : <>
-        {study.thesis && <p class="thesis"><strong>{t.study.thesis}</strong>{study.thesis}</p>}
+        {storyLang !== lang && <div class="lang-note">
+          <span>{t.study.langMismatch(STUDY_LANGS[storyLang as StudyLang]?.label || storyLang, STUDY_LANGS[lang].label)}</span>
+          <button class="ghost" disabled={Boolean(busy)} onClick={() => void translate()}><Languages size={15} />{t.study.translate(STUDY_LANGS[lang].label)}</button>
+        </div>}
+        {study.thesis &&<p class="thesis"><strong>{t.study.thesis}</strong>{study.thesis}</p>}
         <StoryGraph nodes={study.nodes} edges={study.edges} selected={selected} fresh={fresh.node} kinds={t.study.kinds} onSelect={setSelected} />
 
         {focus && <section class={`focus k-${focus.kind}`}>

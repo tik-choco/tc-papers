@@ -253,3 +253,10 @@ main.wide { max-width: 1480px }
   .criteria summary { grid-template-columns: 1fr 3.5rem; row-gap: .3rem }
   .criteria summary .bar { grid-column: 1 / -1; grid-row: 2 }
 }
+
+.lang-select { position: relative }
+.lang-select select { border: 0; background: transparent; color: inherit; font-size: .88rem; padding: 0 .1rem; cursor: pointer }
+.lang-select select:focus-visible { outline: none }
+.lang-select:focus-within { outline: 2px solid var(--primary); outline-offset: 1px }
+.lang-note { display: flex; align-items: center; justify-content: space-between; gap: .5rem; flex-wrap: wrap; margin-top: .6rem; padding: .5rem .5rem .5rem .9rem; border-radius: 12px; background: color-mix(in srgb, var(--d-border) 12%, var(--surface)); font-size: .88rem }
+.lang-note .ghost { color: var(--primary); font-weight: 600 }

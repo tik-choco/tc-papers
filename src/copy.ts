@@ -67,6 +67,9 @@ export const COPY = {
       asked: (n: number) => `質問 ${n} 件`, questionBadge: 'この質問で追加',
       showPdf: 'PDF を表示', hidePdf: 'PDF を隠す', selectHint: 'テキストを選択すると質問に使えます', zoomIn: '拡大', zoomOut: '縮小',
       notReady: '本文のスキャンが終わると使えます。', copy: 'ノートをコピー',
+      language: '出力言語（グラフ・ツリー・回答）',
+      langMismatch: (from: string, to: string) => `このノートは${from}で書かれています。これからの回答は${to}で追加されます。`,
+      translate: (to: string) => `${to}に翻訳（ツリーはそのまま）`,
       kinds: { background: '背景', problem: '問題', gap: '未解決点', claim: '主張', method: '手法', experiment: '実験', result: '結果', limitation: '限界', implication: '意義', concept: '概念' } as Record<StoryKind, string>,
     },
     viewer: {
@@ -134,6 +137,9 @@ export const COPY = {
       asked: (n: number) => `${n} question${n === 1 ? '' : 's'}`, questionBadge: 'Added by',
       showPdf: 'Show PDF', hidePdf: 'Hide PDF', selectHint: 'Select text to ask about it', zoomIn: 'Zoom in', zoomOut: 'Zoom out',
       notReady: 'Available once the text scan finishes.', copy: 'Copy notes',
+      language: 'Output language (graph, tree, answers)',
+      langMismatch: (from: string, to: string) => `These notes are in ${from}. New answers will be added in ${to}.`,
+      translate: (to: string) => `Translate to ${to} (keeps the tree)`,
       kinds: { background: 'Background', problem: 'Problem', gap: 'Gap', claim: 'Claim', method: 'Method', experiment: 'Experiment', result: 'Result', limitation: 'Limitation', implication: 'Implication', concept: 'Concept' } as Record<StoryKind, string>,
     },
     viewer: {

@@ -99,4 +99,6 @@ export interface Study {
   questions: StudyQuestion[]
   /** Questions worth asking next, refreshed after every answer. */
   followUps: string[]
+  /** Output language the story was written or last translated in (lib/study.ts STUDY_LANGS). Absent on older studies. */
+  lang?: string
 }

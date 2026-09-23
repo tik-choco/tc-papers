@@ -123,6 +123,46 @@ test('a reply in its own schema is converted to the story graph instead of faili
   expect(requests[1]!.user).not.toContain('locality-sensitive')
 })
 
+test('the output language is chosen independently of the paper and existing notes can be translated', async ({ page }) => {
+  await setup(page)
+  const requests: { system: string; user: string }[] = []
+  await page.route(API + '/chat/completions', async route => {
+    const messages = route.request().postDataJSON().messages
+    const system = String(messages[0].content)
+    if (system.includes('story')) requests.push({ system, user: messages[1].content })
+    if (!system.startsWith('Translate every value')) return route.fallback()
+    requests.push({ system, user: messages[1].content })
+    const texts = JSON.parse(messages[1].content) as Record<string, string>
+    await route.fulfill({ json: { choices: [{ message: { content: JSON.stringify(Object.fromEntries(Object.entries(texts).map(([k, v]) => [k, 'JA ' + v]))) } }] } })
+  })
+  await page.goto('/')
+  await page.locator('input[type=file]').setInputFiles({ name: 'sparse.pdf', mimeType: 'application/pdf', buffer: pdfFixture() })
+  await expect(page.locator('.verdict .score-badge')).toHaveText(/\d+/, { timeout: 20_000 })
+  await page.getByRole('tab', { name: 'Understand' }).click()
+
+  // An English paper, story requested in English.
+  await page.getByRole('combobox', { name: 'Output language' }).selectOption('en')
+  await page.getByRole('button', { name: 'Map the story' }).click()
+  await expect(page.locator('.story-node')).toHaveCount(4, { timeout: 20_000 })
+  expect(requests[0]!.system).toContain('in English, even when the paper')
+  expect(requests[0]!.user).toMatch(/in English, even when the paper[\s\S]*"followUps": string\[\]\}$/)
+  await expect(page.locator('.lang-note')).toHaveCount(0)
+
+  // Switching to Japanese offers to translate the existing notes instead of rebuilding them.
+  await page.getByRole('combobox', { name: 'Output language' }).selectOption('ja')
+  await expect(page.locator('.lang-note')).toContainText('These notes are in English. New answers will be added in 日本語.')
+  await page.getByRole('button', { name: 'Translate to 日本語 (keeps the tree)' }).click()
+  await expect(page.locator('.story-node').first()).toContainText('JA Attention is quadratic', { timeout: 20_000 })
+  await expect(page.locator('.tree')).toContainText('JA Replaces dense attention')
+  await expect(page.locator('.thesis')).toContainText('JA Hashing tokens')
+  await expect(page.locator('.lang-note')).toHaveCount(0)
+  expect(requests.at(-1)!.system).toContain('into Japanese')
+
+  // The choice is remembered.
+  await page.reload()
+  await expect(page.getByRole('combobox', { name: 'Output language' })).toHaveValue('ja')
+})
+
 test('PDFs from tc-pdf-viewer can be picked and open in understanding mode', async ({ page }) => {
   await setup(page)
   await page.goto('/')

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { applyAnswer, isStudy, layoutStory, outline, parseStory, studyToMarkdown } from './study'
+import { describe, expect, it, vi } from 'vitest'
+import { applyAnswer, applyTranslation, askMessage, isStudy, layoutStory, loadStudyLang, outline, parseStory, saveStudyLang, storyPrompt, storyReminder, studyTexts, studyToMarkdown } from './study'
 import { COPY } from '../copy'
 
 const story = JSON.stringify({
@@ -83,6 +83,43 @@ describe('layoutStory', () => {
     expect(layout.nodes[1]!.y).toBe(layout.nodes[2]!.y)
     expect(layout.nodes[1]!.x).toBeLessThan(layout.nodes[2]!.x)
     expect(layout.nodes[0]!.x).toBe((layout.nodes[1]!.x + layout.nodes[2]!.x) / 2)
+  })
+})
+
+describe('output language', () => {
+  it('states the language in the system prompt and again after the paper', () => {
+    expect(storyPrompt('ja')).toContain('in Japanese, even when the paper is written in another language')
+    expect(storyReminder('zh-Hans')).toContain('Simplified Chinese')
+    const study = parseStory(story, 'm')
+    expect(askMessage(study, 'Why?', undefined, undefined, 'ko').trimEnd()).toMatch(/Korean[\s\S]*"followUps": string\[\]\}$/)
+  })
+  it('defaults to the browser language, then remembers the choice', () => {
+    localStorage.removeItem('tc-papers:study-lang-v1')
+    const spy = vi.spyOn(navigator, 'language', 'get')
+    spy.mockReturnValue('zh-TW'); expect(loadStudyLang('en')).toBe('zh-Hant')
+    spy.mockReturnValue('zh-CN'); expect(loadStudyLang('en')).toBe('zh-Hans')
+    spy.mockReturnValue('fr-FR'); expect(loadStudyLang('ja')).toBe('ja')
+    saveStudyLang('ko'); expect(loadStudyLang('ja')).toBe('ko')
+    spy.mockRestore(); localStorage.removeItem('tc-papers:study-lang-v1')
+  })
+  it('translates every text in place and keeps ids, structure and untranslated keys', () => {
+    const q = { text: 'Why quadratic?', askedAt: '2026-01-01T00:00:00Z', model: 'm' }
+    const study = applyAnswer(parseStory(story, 'm'), JSON.stringify({ nodeId: 'n1', points: [{ text: 'Pairs grow as n²', children: ['detail'] }] }), q).study
+    const texts = studyTexts(study)
+    expect(texts['n1.label']).toBe('Attention is quadratic')
+    expect(Object.values(texts)).toContain('detail')
+    // Translate everything except the first node's summary, which the model "forgot".
+    const reply = Object.fromEntries(Object.entries(texts).filter(([key]) => key !== 'n1.summary').map(([key, value]) => [key, '訳:' + value]))
+    const next = applyTranslation(study, JSON.stringify(reply), 'ja')
+    expect(next.lang).toBe('ja')
+    expect(next.nodes[0]).toMatchObject({ id: 'n1', label: '訳:Attention is quadratic', summary: 'Long inputs blow up memory.' })
+    expect(next.tree.n1!.at(-1)!.children[0]!.text).toBe('訳:detail')
+    expect(next.tree.n1!.at(-1)!.id).toBe(study.tree.n1!.at(-1)!.id)
+    expect(next.questions[0]!.text).toBe('訳:Why quadratic?')
+    expect(next.edges.map(e => e.to)).toEqual(study.edges.map(e => e.to))
+  })
+  it('rejects a reply that is not a translation of these notes', () => {
+    expect(() => applyTranslation(parseStory(story, 'm'), '{"summary": "something else"}', 'ja')).toThrow('AI_INVALID_RESPONSE')
   })
 })
 
