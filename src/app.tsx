@@ -13,6 +13,7 @@ import { ViewerPicker } from './components/ViewerPicker'
 import { PDF_VIEWER_INDEX_KEY } from './lib/pdfViewerLibrary'
 import { progressText } from './components/ProgressView'
 import { useTheme } from './hooks/useTheme'
+import { backdropClose } from './lib/backdrop'
 
 const hashParams = () => new URLSearchParams(location.hash.slice(1))
 const readHash = () => hashParams().get('paper') || ''
@@ -164,7 +165,7 @@ export function App() {
     {dragging && <div class="drop-overlay"><FileUp size={40} strokeWidth={1.5} /><strong>{t.drop}</strong></div>}
     {notice && <div class="toast" role="alert"><span>{notice}</span><button class="icon" aria-label={t.close} onClick={() => setNotice('')}><X size={15} /></button></div>}
     {picker && <ViewerPicker t={t} onPick={importFromViewer} onClose={() => setPicker(false)} />}
-    {settings && <div class="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setSettings(false) }}>
+    {settings && <div class="modal-backdrop" {...backdropClose(() => setSettings(false))}>
       <div class="modal" role="dialog" aria-modal="true" aria-label={t.settings}>
         <div class="modal-head"><h2>{t.aiSettings}</h2><button class="icon" aria-label={t.close} onClick={() => setSettings(false)}><X size={18} /></button></div>
         <AiSettings locale={locale} network={network} />

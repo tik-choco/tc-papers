@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useState } from 'preact/hooks'
 import { ExternalLink, FileText, X } from 'lucide-preact'
 import type { Copy } from '../copy'
+import { backdropClose } from '../lib/backdrop'
 import { PDF_VIEWER_INDEX_KEY, listViewerFiles, loadViewerFile, pdfViewerKnown, type ViewerFile } from '../lib/pdfViewerLibrary'
 
 /** Lists tc-pdf-viewer's library (same origin) and hands the chosen PDF over as a File. */
@@ -29,7 +30,7 @@ export function ViewerPicker({ t, onPick, onClose }: { t: Copy; onPick: (file: F
     finally { setLoading('') }
   }
 
-  return <div class="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+  return <div class="modal-backdrop" {...backdropClose(onClose)}>
     <div class="modal picker" role="dialog" aria-modal="true" aria-label={t.viewer.title}>
       <div class="modal-head"><h2>{t.viewer.title}</h2><button class="icon" aria-label={t.close} onClick={onClose}><X size={18} /></button></div>
       <p class="muted">{t.viewer.note}</p>
