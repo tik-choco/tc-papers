@@ -1,0 +1,13 @@
+node_modules/
+dist/
+*.local
+.env
+*.tsbuildinfo
+.npm-cache/
+
+.task-backups/
+.test-output/
+
+public/pdfjs/
+playwright-report/
+test-results/
