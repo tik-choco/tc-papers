@@ -3,7 +3,7 @@ import { isStudy } from './study'
 
 export const STORAGE_KEY = 'tc-papers:reviews-v1'
 const CHANGE_EVENT = 'tc-papers:reviews-changed'
-const STATES = ['queued', 'scanning', 'reviewing', 'done', 'error']
+const STATES = ['queued', 'scanning', 'scanned', 'reviewing', 'done', 'error']
 
 function isPaper(value: unknown): value is Paper {
   if (!value || typeof value !== 'object') return false

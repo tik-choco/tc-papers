@@ -36,7 +36,8 @@ export interface ReviewResult {
   criteria: Record<CriterionId, CriterionRating>
 }
 
-export type PaperState = 'queued' | 'scanning' | 'reviewing' | 'done' | 'error'
+/** `scanned`: text is extracted but no review was asked for yet. */
+export type PaperState = 'queued' | 'scanning' | 'scanned' | 'reviewing' | 'done' | 'error'
 
 export type ProgressStep = 'scan' | 'ocr' | 'send' | 'generate'
 
@@ -63,6 +64,8 @@ export interface Paper {
   title: string
   addedAt: string
   state: PaperState
+  /** Added without asking for a review: processing stops after the scan. */
+  scanOnly?: boolean
   progress?: Progress
   error?: string
   scan?: ScanInfo

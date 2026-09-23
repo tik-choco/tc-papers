@@ -9,9 +9,9 @@ export function detectLocale(): Locale {
 
 export const COPY = {
   ja: {
-    drop: 'PDF をドロップすると自動でレビューします', choose: 'ファイルを選択', limit: '1 ファイル 50 MB まで',
+    drop: 'PDF をドロップして追加', choose: 'ファイルを選択', limit: '1 ファイル 50 MB まで',
     settings: '設定', close: '閉じる', back: '一覧へ',
-    states: { queued: '待機中', scanning: 'スキャン中', reviewing: 'レビュー中', done: '完了', error: 'エラー' },
+    states: { queued: '待機中', scanning: 'スキャン中', scanned: '未レビュー', reviewing: 'レビュー中', done: '完了', error: 'エラー' },
     errors: {
       AI_NOT_CONFIGURED: 'AI 未設定です。設定から接続先を選ぶと自動で再開します。',
       NEEDS_OCR: '画像のみの PDF です。設定で OCR 用の画像対応モデルを選ぶと再スキャンできます。',
@@ -32,7 +32,7 @@ export const COPY = {
     summary: '要約', strengths: '強み', weaknesses: '弱み', questions: '著者への質問', fatalFlaws: '致命的な欠陥', structure: '構成チェック',
     howScored: '算出方法', formula: '各観点 1–5 を根拠の確認率で中立 (3) 側へ補正 → 重み付き平均を 0–100 に換算 (90%) + 構成チェック (10%) → 致命的欠陥などで上限。',
     pages: (scan: { pages: number; scannedPages: number; ocrPages: number; truncated: boolean }) => `${scan.pages} ページ` + (scan.truncated ? `（先頭 ${scan.scannedPages} ページを評価）` : '') + (scan.ocrPages ? ` · OCR ${scan.ocrPages} ページ` : ''),
-    rerun: '再レビュー', retry: '再試行', open: 'PDF を開く', remove: '削除', confirmRemove: 'もう一度押すと削除', copyMd: 'Markdown をコピー', copied: 'コピーしました',
+    startReview: 'レビューを開始', notReviewed: 'まだレビューしていません。理解モードだけで使うこともできます。', rerun: '再レビュー', retry: '再試行', open: 'PDF を開く', remove: '削除', confirmRemove: 'もう一度押すと削除', copyMd: 'Markdown をコピー', copied: 'コピーしました',
     duplicate: '登録済みの PDF です', aiSettings: 'AI 接続', aiNote: '「レビュー」と「OCR」に使うモデルを選べます。OCR には画像入力に対応したモデルが必要です。PDF 本文は選択した AI に送信されます。',
     steps: { scan: '本文スキャン', review: 'AI 査読', score: '採点' },
     progress: {
@@ -84,9 +84,9 @@ export const COPY = {
     },
   },
   en: {
-    drop: 'Drop PDFs here to review them automatically', choose: 'Choose files', limit: 'Up to 50 MB per file',
+    drop: 'Drop PDFs here to add them', choose: 'Choose files', limit: 'Up to 50 MB per file',
     settings: 'Settings', close: 'Close', back: 'All papers',
-    states: { queued: 'Queued', scanning: 'Scanning', reviewing: 'Reviewing', done: 'Done', error: 'Error' },
+    states: { queued: 'Queued', scanning: 'Scanning', scanned: 'Not reviewed', reviewing: 'Reviewing', done: 'Done', error: 'Error' },
     errors: {
       AI_NOT_CONFIGURED: 'No AI connection. Pick one in Settings and review resumes automatically.',
       NEEDS_OCR: 'This PDF has no text layer. Choose a vision-capable OCR model in Settings to scan it.',
@@ -107,7 +107,7 @@ export const COPY = {
     summary: 'Summary', strengths: 'Strengths', weaknesses: 'Weaknesses', questions: 'Questions for authors', fatalFlaws: 'Fatal flaws', structure: 'Structure check',
     howScored: 'How this is scored', formula: 'Each 1–5 criterion is pulled toward neutral (3) by the share of its quotes found in the paper → weighted mean mapped to 0–100 (90%) + structure check (10%) → caps for fatal flaws.',
     pages: (scan: { pages: number; scannedPages: number; ocrPages: number; truncated: boolean }) => `${scan.pages} pages` + (scan.truncated ? ` (first ${scan.scannedPages} reviewed)` : '') + (scan.ocrPages ? ` · OCR ${scan.ocrPages}` : ''),
-    rerun: 'Review again', retry: 'Retry', open: 'Open PDF', remove: 'Delete', confirmRemove: 'Click again to delete', copyMd: 'Copy Markdown', copied: 'Copied',
+    startReview: 'Start review', notReviewed: 'Not reviewed yet. You can also use it in understanding mode only.', rerun: 'Review again', retry: 'Retry', open: 'Open PDF', remove: 'Delete', confirmRemove: 'Click again to delete', copyMd: 'Copy Markdown', copied: 'Copied',
     duplicate: 'Already added', aiSettings: 'AI connection', aiNote: 'Choose models for Review and OCR. OCR needs an image-capable model. PDF text is sent to the selected AI.',
     steps: { scan: 'Scan text', review: 'AI review', score: 'Score' },
     progress: {

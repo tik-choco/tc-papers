@@ -50,6 +50,8 @@ export async function processPaper(paper: Paper, locale: Locale): Promise<void> 
         throw new Error(!canOcr ? 'NEEDS_OCR' : result.scan.ocrFailed ? 'OCR_FAILED' : 'AI_NO_TEXT')
       }
     }
+    // Reviews start only when asked for; the paper may be read in understanding mode alone.
+    if (loadPapers().find(p => p.id === id)?.scanOnly) { patchPaper(id, { state: 'scanned', progress: undefined, error: undefined }); return }
     if (!aiConfigured('review')) { patchPaper(id, { state: 'queued', progress: undefined, error: 'AI_NOT_CONFIGURED' }); return }
     patchPaper(id, { state: 'reviewing', progress: { step: 'send', chars: text.length, startedAt }, error: undefined })
     let lastWrite = 0

@@ -26,6 +26,11 @@ async function drop(page: Page, files: { name: string; buffer: Buffer }[]) {
   await page.locator('input[type=file]').setInputFiles(files.map(file => ({ ...file, mimeType: 'application/pdf' })))
 }
 
+/** Adding a PDF only scans it; the review starts on request. */
+async function startReview(page: Page) {
+  await page.getByRole('button', { name: 'Start review' }).click({ timeout: 30_000 })
+}
+
 test('minimal UI on desktop and mobile', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
@@ -49,7 +54,7 @@ test('minimal UI on desktop and mobile', async ({ page }) => {
   expect(errors).toEqual([])
 })
 
-test('dropping a PDF scans and reviews it automatically with a locally computed score', async ({ page }) => {
+test('dropping a PDF scans it and reviews it on request with a locally computed score', async ({ page }) => {
   await configureAi(page)
   const bodies: { messages: { role: string; content: string }[] }[] = []
   await page.route(API + '/chat/completions', async route => {
@@ -58,6 +63,9 @@ test('dropping a PDF scans and reviews it automatically with a locally computed 
   })
   await page.goto('/')
   await drop(page, [{ name: 'sparse.pdf', buffer: pdfFixture() }])
+  await expect(page.locator('.not-reviewed')).toBeVisible({ timeout: 20_000 })
+  expect(bodies).toHaveLength(0)
+  await startReview(page)
   await expect(page.locator('.verdict .score-badge')).toHaveText(/\d+/, { timeout: 20_000 })
   // 4/5 on every criterion with verified evidence → base 75; 5/6 structure checks (no code link) → 0.9·75 + 8.33 = 75.8 → 76
   await expect(page.locator('.verdict .score-badge')).toHaveText('76')
@@ -99,6 +107,7 @@ test('shows what is being analysed while the AI is working', async ({ page }) =>
   })
   await page.goto('/')
   await drop(page, [{ name: 'sparse.pdf', buffer: pdfFixture() }])
+  await startReview(page)
   await expect(page.locator('.progress .steps .done')).toHaveCount(1, { timeout: 20_000 })
   await expect(page.locator('.progress-detail')).toContainText('characters to the AI')
   await expect(page.locator('.progress-detail')).toContainText('elapsed')
@@ -112,6 +121,7 @@ test('hallucinated evidence lowers the score', async ({ page }) => {
   await page.route(API + '/chat/completions', route => route.fulfill({ json: { choices: [{ message: { content: reviewJson('a sentence the paper never contains anywhere') } }] } }))
   await page.goto('/')
   await drop(page, [{ name: 'sparse.pdf', buffer: pdfFixture() }])
+  await startReview(page)
   // unverified → 4 pulled to 3.5 → base 62.5 → 0.9·62.5 + 8.33 = 64.6 → 65 (vs 76 when verified)
   await expect(page.locator('.verdict .score-badge')).toHaveText('65', { timeout: 20_000 })
 })
@@ -130,6 +140,7 @@ test('an unparseable review is sent back once to be fixed instead of failing', a
   })
   await page.goto('/')
   await drop(page, [{ name: 'sparse.pdf', buffer: pdfFixture() }])
+  await startReview(page)
   await expect(page.locator('.verdict .score-badge')).toHaveText('76', { timeout: 20_000 })
   expect(systems).toHaveLength(2)
   expect(systems[1]).toContain('could not be used')
@@ -143,6 +154,7 @@ test('reviews are backed up to tc-storage through the real mistlib CID store', a
   await page.route(API + '/chat/completions', route => route.fulfill({ json: { choices: [{ message: { content: reviewJson('reduces memory by 43% on long documents') } }] } }))
   await page.goto('/')
   await drop(page, [{ name: 'sparse.pdf', buffer: pdfFixture() }])
+  await startReview(page)
   await expect(page.locator('.verdict .score-badge')).toHaveText('76', { timeout: 20_000 })
   // Published after the startup delay / debounce: a shared record whose CID resolves in the store.
   await expect.poll(() => page.evaluate(() => localStorage.getItem('tc-shared-papers-backup-v1')), { timeout: 15_000 }).toContain('"cid"')
@@ -171,6 +183,7 @@ test('image-only pages are rendered and sent to the OCR model', async ({ page })
   })
   await page.goto('/')
   await drop(page, [{ name: 'scan.pdf', buffer: pdfFixture('Scanned', [[]]) }])
+  await startReview(page)
   await expect(page.locator('.verdict .score-badge')).toHaveText(/\d+/, { timeout: 30_000 })
   await expect(page.locator('.review .muted').first()).toContainText('OCR 1')
   expect(ocrCalls).toBe(1)
@@ -179,6 +192,7 @@ test('image-only pages are rendered and sent to the OCR model', async ({ page })
 test('waits for an AI connection instead of failing', async ({ page }) => {
   await page.goto('/')
   await drop(page, [{ name: 'sparse.pdf', buffer: pdfFixture() }])
+  await startReview(page)
   await expect(page.getByRole('alert')).toContainText('No AI connection')
 })
 
@@ -201,6 +215,7 @@ test('retry resumes from the failed step instead of rescanning finished pages', 
   })
   await page.goto('/')
   await drop(page, [{ name: 'mixed.pdf', buffer: pdfFixture('Mixed', [BODY, [], []]) }])
+  await startReview(page)
   await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible({ timeout: 30_000 })
   expect(ocrPages).toEqual([2, 3])
   await page.getByRole('button', { name: 'Retry' }).click()
@@ -222,6 +237,7 @@ test('retry after a review failure does not scan again', async ({ page }) => {
   })
   await page.goto('/')
   await drop(page, [{ name: 'scan.pdf', buffer: pdfFixture('Scanned', [[]]) }])
+  await startReview(page)
   await page.getByRole('button', { name: 'Retry' }).click({ timeout: 30_000 })
   await expect(page.locator('.verdict .score-badge')).toHaveText(/\d+/, { timeout: 30_000 })
   expect(ocrCalls).toBe(1)

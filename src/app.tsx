@@ -79,7 +79,7 @@ export function App() {
         const stored = await acceptPdf(file)
         if (loadPapers().some(p => p.id === stored.id)) { errors.push(`${file.name}: ${t.duplicate}`); continue }
         await storePdf(stored)
-        const paper: Paper = { id: stored.id, name: file.name.slice(0, 500), size: file.size, title: file.name.replace(/\.pdf$/i, '').slice(0, 500), addedAt: new Date().toISOString(), state: 'queued' }
+        const paper: Paper = { id: stored.id, name: file.name.slice(0, 500), size: file.size, title: file.name.replace(/\.pdf$/i, '').slice(0, 500), addedAt: new Date().toISOString(), state: 'queued', scanOnly: true }
         mutatePapers(current => [paper, ...current.filter(p => p.id !== paper.id)])
         firstId ||= paper.id
       } catch (error) {
@@ -100,14 +100,15 @@ export function App() {
     select(id, 'study')
   }
 
+  /** Starts the first review, or reviews again. */
   async function rerun(paper: Paper) {
     // Retry resumes where it failed: a finished scan is kept and only the review runs again.
     // Pages whose OCR failed are rescanned; the others come from the scan checkpoint.
     if (paper.state === 'error' && paper.scan?.ocrFailed) {
       const stored = await getPdf(paper.id).catch(() => undefined)
       if (stored) await storePdf({ ...stored, text: '' })
-      patchPaper(paper.id, { state: 'queued', error: undefined, scan: undefined })
-    } else patchPaper(paper.id, { state: 'queued', error: undefined })
+      patchPaper(paper.id, { state: 'queued', error: undefined, scan: undefined, scanOnly: undefined })
+    } else patchPaper(paper.id, { state: 'queued', error: undefined, scanOnly: undefined })
   }
 
   function remove(paper: Paper) {
@@ -146,6 +147,7 @@ export function App() {
           {papers.map(paper => <li key={paper.id}>
             <button onClick={() => select(paper.id)}>
               {paper.state === 'done' && paper.score ? <span class={`score-badge d-${paper.score.decision}`}>{paper.score.total}</span>
+                : paper.state === 'scanned' ? <span class="score-badge pending">–</span>
                 : <span class={`score-badge pending ${paper.state === 'error' || paper.error ? 'failed' : ''}`}>{paper.state === 'error' || paper.error ? '!' : <span class="spinner" />}</span>}
               <span class="p-main">
                 <span class="p-title">{paper.title}</span>

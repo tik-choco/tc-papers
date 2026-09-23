@@ -48,7 +48,8 @@ test('understanding mode maps the story and grows the tree with every question',
   page.on('pageerror', error => errors.push(error.message))
   await page.goto('/')
   await page.locator('input[type=file]').setInputFiles({ name: 'sparse.pdf', mimeType: 'application/pdf', buffer: pdfFixture() })
-  await expect(page.locator('.verdict .score-badge')).toHaveText(/\d+/, { timeout: 20_000 })
+  // Adding a PDF only scans it; understanding mode never needs a review.
+  await expect(page.locator('.not-reviewed')).toBeVisible({ timeout: 20_000 })
 
   await page.getByRole('tab', { name: 'Understand' }).click()
   await expect(page).toHaveURL(/mode=study/)
@@ -119,7 +120,8 @@ test('panels can be dragged, split, resized, hidden and are remembered', async (
   await setup(page)
   await page.goto('/')
   await page.locator('input[type=file]').setInputFiles({ name: 'sparse.pdf', mimeType: 'application/pdf', buffer: pdfFixture() })
-  await expect(page.locator('.verdict .score-badge')).toHaveText(/\d+/, { timeout: 20_000 })
+  // Adding a PDF only scans it; understanding mode never needs a review.
+  await expect(page.locator('.not-reviewed')).toBeVisible({ timeout: 20_000 })
   await page.getByRole('tab', { name: 'Understand' }).click()
   await page.getByRole('button', { name: 'Map the story' }).click()
   await expect(page.locator('.story-node')).toHaveCount(4, { timeout: 20_000 })
@@ -213,7 +215,8 @@ test('a reply in its own schema is converted to the story graph instead of faili
   })
   await page.goto('/')
   await page.locator('input[type=file]').setInputFiles({ name: 'sparse.pdf', mimeType: 'application/pdf', buffer: pdfFixture() })
-  await expect(page.locator('.verdict .score-badge')).toHaveText(/\d+/, { timeout: 20_000 })
+  // Adding a PDF only scans it; understanding mode never needs a review.
+  await expect(page.locator('.not-reviewed')).toBeVisible({ timeout: 20_000 })
   await page.getByRole('tab', { name: 'Understand' }).click()
   await page.getByRole('button', { name: 'Map the story' }).click()
   await expect(page.locator('.story-node')).toHaveCount(4, { timeout: 20_000 })
@@ -240,7 +243,8 @@ test('the output language is chosen independently of the paper and existing note
   })
   await page.goto('/')
   await page.locator('input[type=file]').setInputFiles({ name: 'sparse.pdf', mimeType: 'application/pdf', buffer: pdfFixture() })
-  await expect(page.locator('.verdict .score-badge')).toHaveText(/\d+/, { timeout: 20_000 })
+  // Adding a PDF only scans it; understanding mode never needs a review.
+  await expect(page.locator('.not-reviewed')).toBeVisible({ timeout: 20_000 })
   await page.getByRole('tab', { name: 'Understand' }).click()
 
   // An English paper, story requested in English.

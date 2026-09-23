@@ -102,6 +102,7 @@ export function ReviewView({ paper, t, onBack, onMode, onRerun, onRemove }: { pa
   const r = reviews[version] || reviews[0]
   const score = useMemo(() => r && text !== null ? scoreReview(r, text, paper.scan) : null, [r, text, paper.scan])
   const busy = ['queued', 'scanning', 'reviewing'].includes(paper.state)
+  const unreviewed = paper.state === 'scanned' && !paper.review
 
   return <article class="review">
     <div class="review-top">
@@ -110,7 +111,7 @@ export function ReviewView({ paper, t, onBack, onMode, onRerun, onRemove }: { pa
       <div class="actions">
         {url && <a class="ghost" href={url} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} />{t.open}</a>}
         {r && score && <button class="ghost" onClick={() => { void navigator.clipboard.writeText(toMarkdown(paper, r, score, t)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) }) }}>{copied ? <Check size={15} /> : <Copy size={15} />}{copied ? t.copied : t.copyMd}</button>}
-        <button class="ghost" disabled={busy} onClick={onRerun}><RotateCw size={15} />{paper.state === 'error' ? t.retry : t.rerun}</button>
+        {!unreviewed && <button class="ghost" disabled={busy} onClick={onRerun}><RotateCw size={15} />{paper.state === 'error' ? t.retry : paper.review ? t.rerun : t.startReview}</button>}
         <button class={`ghost danger ${confirming ? 'confirming' : ''}`} onClick={() => confirming ? onRemove() : setConfirming(true)} onBlur={() => setConfirming(false)}><Trash2 size={15} />{confirming ? t.confirmRemove : t.remove}</button>
       </div>
     </div>
@@ -119,6 +120,10 @@ export function ReviewView({ paper, t, onBack, onMode, onRerun, onRemove }: { pa
 
     {paper.state === 'error' || paper.error ? <p class="error-text" role="alert">{t.errors[paper.error || 'UNKNOWN'] || t.errors.UNKNOWN}</p> : null}
     {busy && !paper.error && <ProgressView paper={paper} t={t} />}
+    {unreviewed && <section class="not-reviewed">
+      <p class="muted">{t.notReviewed}</p>
+      <button class="primary" onClick={onRerun}><RotateCw size={15} />{t.startReview}</button>
+    </section>}
 
     {reviews.length > 1 && <label class="history">
       <span class="muted">{t.history}</span>
