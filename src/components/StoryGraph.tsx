@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'preact/hooks'
 import type { StoryEdge, StoryKind, StoryNode } from '../types'
 import { GAP_Y, NODE_H, NODE_W, layoutStory } from '../lib/study'
+import { MathText } from './MathText'
 
 const PAD = 16
 
@@ -70,7 +71,7 @@ export function StoryGraph({ nodes, edges, selected, fresh, kinds, onSelect }: {
         style={{ left: x + PAD + 'px', top: y + PAD + 'px', width: NODE_W + 'px', height: NODE_H + 'px' }}
         aria-pressed={node.id === selected} title={node.summary} onClick={() => onSelect(node.id)}>
         <small>{kinds[node.kind]}</small>
-        <span>{node.label}</span>
+        <span><MathText text={node.label} /></span>
       </button>)}
     </div>
   </div>

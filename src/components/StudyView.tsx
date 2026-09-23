@@ -11,6 +11,7 @@ import { StoryGraph, scrollWithin } from './StoryGraph'
 import { Workspace, type PanelDef } from './Workspace'
 import { defaultLayout, loadLayout, reveal, saveLayout, type PanelId, type StudyLayout } from '../lib/layout'
 import { PdfPane, type PdfSelection, type PdfTarget } from './PdfPane'
+import { MathText } from './MathText'
 
 export type Mode = 'review' | 'study'
 
@@ -29,7 +30,7 @@ function Points({ points, fresh, questions, t, onPage }: { points: StudyPoint[];
       return <li key={p.id} class={fresh.has(p.id) ? 'fresh' : ''}>
         <span class="pt">
           {q && <span class="q-badge" title={`${t.study.questionBadge}: ${q.text}`}>Q{q.n}</span>}
-          {p.text}
+          <MathText text={p.text} />
           {p.page && <button class="page-ref" onClick={() => onPage(p.page!)}>p.{p.page}</button>}
         </span>
         {p.children.length > 0 && <Points points={p.children} fresh={fresh} questions={questions} t={t} onPage={onPage} />}
@@ -178,7 +179,7 @@ export function StudyView({ paper, t, locale, toolbarSlot, onBack, onMode }: { p
         </button> : <p class="muted">{t.study.notReady}</p>}
         {busy && <p class="muted small">{t.study.thinking(busy.chars)}</p>}
       </section> : <div class="graph-panel" ref={graphRef}>
-        {study.thesis && <p class="thesis"><strong>{t.study.thesis}</strong>{study.thesis}</p>}
+        {study.thesis && <p class="thesis"><strong>{t.study.thesis}</strong><MathText text={study.thesis} /></p>}
         <StoryGraph nodes={study.nodes} edges={study.edges} selected={selected} fresh={fresh} kinds={t.study.kinds} onSelect={setSelected} />
       </div>,
     },
@@ -186,8 +187,8 @@ export function StudyView({ paper, t, locale, toolbarSlot, onBack, onMode }: { p
       title: t.study.panels.focus,
       body: study && focus ? <section class={`focus k-${focus.kind}`}>
         <small>{t.study.kinds[focus.kind]}</small>
-        <h2>{focus.label}</h2>
-        <p>{focus.summary}</p>
+        <h2><MathText text={focus.label} /></h2>
+        <p><MathText text={focus.summary} /></p>
         {focus.pages.length > 0 && <p class="pages">{focus.pages.map(page => <button key={page} class="page-ref" onClick={() => jump(page)}>p.{page}</button>)}</p>}
         {(study.tree[focus.id] || []).length > 0 && <div class="focus-points"><Points points={study.tree[focus.id]!} fresh={fresh.points} questions={questions} t={t} onPage={jump} /></div>}
       </section> : pending,
@@ -197,7 +198,7 @@ export function StudyView({ paper, t, locale, toolbarSlot, onBack, onMode }: { p
       body: study ? <section class="tree" ref={treeRef}>
         <ul class="tree-root">
           {study.nodes.map(node => <li key={node.id} data-node={node.id} class={node.id === selected ? 'current' : ''}>
-            <button class={`node-head k-${node.kind}`} onClick={() => setSelected(node.id)}><i />{node.label}<small>{t.study.kinds[node.kind]}</small></button>
+            <button class={`node-head k-${node.kind}`} onClick={() => setSelected(node.id)}><i /><MathText text={node.label} /><small>{t.study.kinds[node.kind]}</small></button>
             {(study.tree[node.id] || []).length > 0 && <Points points={study.tree[node.id]!} fresh={fresh.points} questions={questions} t={t} onPage={jump} />}
           </li>)}
         </ul>
@@ -208,7 +209,7 @@ export function StudyView({ paper, t, locale, toolbarSlot, onBack, onMode }: { p
       body: study ? <form class="ask" onSubmit={e => { e.preventDefault(); if (canAsk) void ask() }}>
         {!graphVisible && <button type="button" class="to-graph" onClick={() => graphRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })}><ArrowUp size={14} />{t.study.toGraph}</button>}
         {study.followUps.length > 0 && !busy && <div class="follow-ups" aria-label={t.study.followUps}>
-          {study.followUps.map(item => <button type="button" key={item} onClick={() => void ask(item)}>{item}</button>)}
+          {study.followUps.map(item => <button type="button" key={item} onClick={() => void ask(item)}><MathText text={item} /></button>)}
         </div>}
         {selection && <div class="selection-chip">
           <span><strong>{t.study.selection}{selection.page ? ` p.${selection.page}` : ''}:</strong> “{selection.text.length > 140 ? selection.text.slice(0, 140) + '…' : selection.text}”</span>

@@ -5,6 +5,7 @@ import { getPdf } from '../lib/pdf'
 import { DECISION_BANDS, scoreReview, type ScoreBreakdown } from '../lib/score'
 import type { Copy as CopyText } from '../copy'
 import { ProgressView } from './ProgressView'
+import { MathText } from './MathText'
 import { ModeTabs, type Mode } from './StudyView'
 
 export function ScoreBadge({ score }: { score: ScoreBreakdown }) {
@@ -139,7 +140,7 @@ export function ReviewView({ paper, t, onBack, onMode, onRerun, onRemove }: { pa
         </div>
       </section>
 
-      {r.overall && <section class="overall"><h2>{t.overall}</h2><p>{r.overall}</p></section>}
+      {r.overall && <section class="overall"><h2>{t.overall}</h2><p><MathText text={r.overall} /></p></section>}
 
       <Grounds score={score} t={t} />
 
@@ -153,7 +154,7 @@ export function ReviewView({ paper, t, onBack, onMode, onRerun, onRemove }: { pa
               <span class="bar"><span style={{ width: `${(c.adjusted - 1) / 4 * 100}%` }} /></span>
               <span class="c-score">{fmt(c.adjusted)}<small>{c.raw !== c.adjusted ? ` (${c.raw})` : ''}</small></span>
             </summary>
-            {rating.rationale && <p>{rating.rationale}</p>}
+            {rating.rationale && <p><MathText text={rating.rationale} /></p>}
             {rating.evidence.length > 0 && <ul class="evidence">{rating.evidence.map((e, i) => <li key={i} class={c.checks[i] ? 'ok' : 'ng'} title={c.checks[i] ? t.verified : t.unverified}>
               {c.checks[i] ? <Check size={13} /> : <X size={13} />}<q>{e.quote}</q>{e.page && <small> p.{e.page}</small>}
             </li>)}</ul>}
@@ -162,21 +163,21 @@ export function ReviewView({ paper, t, onBack, onMode, onRerun, onRemove }: { pa
         <p class="formula muted"><strong>{t.howScored}:</strong> {t.formula}</p>
       </section>
 
-      {r.summary && <section><h2>{t.summary}</h2><p>{r.summary}</p></section>}
-      {r.fatalFlaws.length > 0 && <section class="fatal"><h2>{t.fatalFlaws}</h2><ul>{r.fatalFlaws.map(item => <li>{item}</li>)}</ul></section>}
+      {r.summary && <section><h2>{t.summary}</h2><p><MathText text={r.summary} /></p></section>}
+      {r.fatalFlaws.length > 0 && <section class="fatal"><h2>{t.fatalFlaws}</h2><ul>{r.fatalFlaws.map(item => <li><MathText text={item} /></li>)}</ul></section>}
       <div class="two-col">
-        {r.strengths.length > 0 && <section><h2>{t.strengths}</h2><ul>{r.strengths.map(item => <li>{item}</li>)}</ul></section>}
-        {r.weaknesses.length > 0 && <section><h2>{t.weaknesses}</h2><ul>{r.weaknesses.map(item => <li>{item}</li>)}</ul></section>}
+        {r.strengths.length > 0 && <section><h2>{t.strengths}</h2><ul>{r.strengths.map(item => <li><MathText text={item} /></li>)}</ul></section>}
+        {r.weaknesses.length > 0 && <section><h2>{t.weaknesses}</h2><ul>{r.weaknesses.map(item => <li><MathText text={item} /></li>)}</ul></section>}
       </div>
-      {r.pathToAcceptance && r.pathToAcceptance.length > 0 && <section class="path"><h2>{t.pathToAcceptance}</h2><ol>{r.pathToAcceptance.map(item => <li>{item}</li>)}</ol></section>}
+      {r.pathToAcceptance && r.pathToAcceptance.length > 0 && <section class="path"><h2>{t.pathToAcceptance}</h2><ol>{r.pathToAcceptance.map(item => <li><MathText text={item} /></li>)}</ol></section>}
       {r.comments && r.comments.length > 0 && <section><h2>{t.comments}</h2><ul class="comments">
         {r.comments.map((c, i) => <li key={i} class={c.severity}>
           <div class="c-head"><span class="sev">{t.severity[c.severity]}</span>{c.page && <span class="muted">p.{c.page}</span>}{c.section && <span class="muted">{c.section}</span>}</div>
-          {c.comment && <p>{c.comment}</p>}
-          {c.suggestion && <p class="suggestion"><strong>{t.suggestion}:</strong> {c.suggestion}</p>}
+          {c.comment && <p><MathText text={c.comment} /></p>}
+          {c.suggestion && <p class="suggestion"><strong>{t.suggestion}:</strong> <MathText text={c.suggestion} /></p>}
         </li>)}
       </ul></section>}
-      {r.questions.length > 0 && <section><h2>{t.questions}</h2><ul>{r.questions.map(item => <li>{item}</li>)}</ul></section>}
+      {r.questions.length > 0 && <section><h2>{t.questions}</h2><ul>{r.questions.map(item => <li><MathText text={item} /></li>)}</ul></section>}
       <section><h2>{t.structure}</h2><ul class="checks">{score.structure.map(s => <li class={s.present ? 'ok' : 'ng'}>{s.present ? <Check size={13} /> : <X size={13} />}{t.structureLabels[s.id]}</li>)}</ul></section>
       <p class="muted small saved">{t.savedNote} {t.historyNote}</p>
     </>}

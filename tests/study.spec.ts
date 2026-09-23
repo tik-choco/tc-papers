@@ -11,7 +11,7 @@ const story = JSON.stringify({
   thesis: 'Hashing tokens into buckets makes attention on long documents cheap.',
   nodes: [
     { id: 'p', kind: 'problem', label: 'Attention is quadratic', summary: 'Memory grows with the square of the length.', pages: [1], points: [{ text: 'Dense attention compares every pair', page: 1 }] },
-    { id: 'm', kind: 'method', label: 'LSH buckets', summary: 'Similar tokens share a bucket.', pages: [1], points: [{ text: 'Replaces dense attention', page: 1 }] },
+    { id: 'm', kind: 'method', label: 'LSH buckets', summary: 'Similar tokens share a bucket, so cost drops to $O(n \\log n)$.', pages: [1], points: [{ text: 'Replaces dense attention', page: 1 }, { text: 'Score $$\\frac{q^\\top k}{\\sqrt{d}}$$ per bucket', page: 1 }] },
     { id: 'r', kind: 'result', label: '43% less memory', summary: 'Consistent gains on three benchmarks.', pages: [1], points: [] },
     { id: 'l', kind: 'limitation', label: 'English only', summary: 'Other languages untested.', pages: [1], points: [] },
   ],
@@ -63,8 +63,13 @@ test('understanding mode maps the story and grows the tree with every question',
   expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight)).toBe(true)
   for (const name of ['PDF', 'Story', 'Selected node', 'Ask']) await expect(page.getByRole('region', { name, exact: true })).toBeInViewport()
   await page.locator('.story-node', { hasText: 'LSH buckets' }).click()
-  await expect(page.locator('.focus')).toContainText('Similar tokens share a bucket.')
+  await expect(page.locator('.focus')).toContainText('Similar tokens share a bucket')
   await expect(page.locator('.focus-points')).toContainText('Replaces dense attention')
+  // TeX from the model is typeset by KaTeX, inline and displayed, instead of shown as raw source.
+  await expect(page.locator('.focus > p .math .katex')).toBeVisible()
+  await expect(page.locator('.focus-points .math.display .katex-display')).toBeVisible()
+  await expect(page.locator('.focus')).not.toContainText('$')
+  await page.locator('.focus').screenshot({ path: '.test-output/study-math.png' })
   await expect(page.locator('.tree li.current')).toContainText('LSH buckets')
   expect(await page.evaluate(() => scrollY)).toBe(0)
   await expect(page.locator('.to-graph')).toBeHidden()

@@ -370,3 +370,7 @@ main.wide { max-width: none; padding: 0 .5rem }
 .esc-hint { flex: none; display: inline-flex; align-items: center; gap: .3rem; margin-right: .15rem; font-size: .72rem; color: var(--muted); white-space: nowrap }
 kbd { display: inline-block; min-width: 1.6em; padding: .05rem .35rem; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 5px; background: var(--surface); font: 600 .68rem/1.3 ui-monospace, "SFMono-Regular", Consolas, monospace; color: var(--text); text-align: center }
 @media (max-width: 959px) { .esc-hint { display: none } }
+
+/* KaTeX formulas in model prose (MathText). */
+.math.display { display: block; max-width: 100%; overflow-x: auto; overflow-y: hidden; margin: 0.35em 0; }
+.math .katex { font-size: 1.05em; }

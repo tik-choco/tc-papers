@@ -24,6 +24,10 @@ describe('extractJson', () => {
     expect(extractJson('{"a": "彼は“速い”と言った"}')).toEqual({ a: '彼は“速い”と言った' })
     expect(extractJson('{“a”: 1}')).toEqual({ a: 1 })
   })
+  it('keeps TeX whose backslashes the model forgot to escape', () => {
+    expect(extractJson(String.raw`{"a": "$\alpha + \frac{1}{\theta} \to \nabla \underline{x}$"}`)).toEqual({ a: String.raw`$\alpha + \frac{1}{\theta} \to \nabla \underline{x}$` })
+    expect(extractJson(String.raw`{"a": "$\\frac{1}{2}$ \"q\" line\nnext é"}`)).toEqual({ a: '$\\frac{1}{2}$ "q" line\nnext é' })
+  })
   it('throws when nothing can be recovered', () => {
     expect(() => extractJson('Sorry, I cannot help with that.')).toThrow('AI_INVALID_RESPONSE')
     expect(() => extractJson('')).toThrow('AI_INVALID_RESPONSE')

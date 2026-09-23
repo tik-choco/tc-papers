@@ -25,6 +25,23 @@ export function extractJson(raw: string): Record<string, unknown> {
   throw new Error('AI_INVALID_RESPONSE')
 }
 
+/** TeX commands that start like a valid JSON escape (\frac reads as form feed + "rac"). */
+const TEX_COMMANDS = new Set(('backslash bar beta big bigcap bigcup bigg bigl bigr binom bm bmod boldsymbol bot bullet '
+  + 'fbox forall frac frown nabla ne neg neq nexists ngeq ni nleq nmid nolimits nonumber not notin nu '
+  + 'rangle rbrace rbrack rceil rfloor rho right rightarrow rm rvert tan tanh tau tbinom text textbf textit textrm textsf '
+  + 'textstyle texttt tfrac therefore theta tilde times to top triangle triangleq tt').split(' '))
+
+/**
+ * A single backslash in a JSON string that is really TeX the model forgot to escape: an invalid escape
+ * (\alpha, \sum, \underline) or a known command. Doubled so the text survives JSON.parse unchanged.
+ */
+function isTexBackslash(text: string, i: number): boolean {
+  const next = text[i + 1] ?? ''
+  if (next === 'u') return !/^[0-9a-fA-F]{4}/.test(text.slice(i + 2, i + 6))
+  if ('bfnrt'.includes(next) && next) return TEX_COMMANDS.has(/^[a-z]+/i.exec(text.slice(i + 1))![0])
+  return !'"\\/'.includes(next) || !next
+}
+
 interface Scanned { text: string; open: string[]; inString: boolean }
 
 /** Reads one balanced object from `start`, string-aware, so braces in prose after it are ignored. */
@@ -35,7 +52,10 @@ function scanObject(text: string, start: number): Scanned {
     const c = text[i]!
     if (inString) {
       if (escaped) escaped = false
-      else if (c === '\\') escaped = true
+      else if (c === '\\') {
+        if (isTexBackslash(text, i)) { out += '\\\\'; continue }
+        escaped = true
+      }
       else if (c === '"') inString = false
       // Raw control characters are invalid inside JSON strings but common in model output.
       else if (c === '\n') { out += '\\n'; continue }
