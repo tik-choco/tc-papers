@@ -59,6 +59,6 @@ export function AiSettings({ locale, network }: { locale: Locale; network: Retur
       consumerStatus={status}
       provider={{ enabled: preferences.providerEnabled, onEnabledChange: providerEnabled => update({ providerEnabled }), sharedPresetIds: preferences.sharedPresetIds, onSharedPresetIdsChange: sharedPresetIds => update({ sharedPresetIds }), status: provider }}
       defaultReasoningEffort={preferences.reasoning} onDefaultReasoningEffortChange={reasoning => update({ reasoning })}
-      tasks={(['review', 'ocr'] as const).map(key => ({ key, label: t.tasks[key], presetId: preferences.tasks[key], reasoningEffort: preferences.reasoning, onPresetChange: id => update({ tasks: { ...preferences.tasks, [key]: id } }), onReasoningEffortChange: reasoning => update({ reasoning }) }))} />
+      tasks={(['review', 'study', 'ocr'] as const).map(key => ({ key, label: t.tasks[key], presetId: preferences.tasks[key], reasoningEffort: preferences.reasoning, onPresetChange: id => update({ tasks: { ...preferences.tasks, [key]: id } }), onReasoningEffortChange: reasoning => update({ reasoning }) }))} />
   </section>
 }

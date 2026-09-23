@@ -55,7 +55,7 @@ export async function acceptPdf(file: File): Promise<StoredPdf> {
   return { id, blob: new Blob([bytes], { type: 'application/pdf' }), text: '' }
 }
 
-async function openDocument(blob: Blob) {
+export async function openDocument(blob: Blob) {
   const pdfjs = await import('pdfjs-dist')
   const { default: workerSrc } = await import('pdfjs-dist/build/pdf.worker.min.mjs?url')
   pdfjs.GlobalWorkerOptions.workerSrc = workerSrc

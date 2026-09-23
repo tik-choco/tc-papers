@@ -32,7 +32,7 @@ test('minimal UI on desktop and mobile', async ({ page }) => {
   await page.goto('/')
   await expect(page.locator('.brand')).toHaveText('TC Papers')
   await expect(page.locator('.dropzone')).toBeVisible()
-  await expect(page.locator('button:visible, a:visible')).toHaveCount(4) // brand, theme, settings, dropzone
+  await expect(page.locator('button:visible, a:visible')).toHaveCount(5) // brand, theme, settings, dropzone, tc-pdf-viewer picker
   await page.getByRole('button', { name: 'Switch to dark theme' }).click()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
   await page.reload()
@@ -114,6 +114,26 @@ test('hallucinated evidence lowers the score', async ({ page }) => {
   await drop(page, [{ name: 'sparse.pdf', buffer: pdfFixture() }])
   // unverified → 4 pulled to 3.5 → base 62.5 → 0.9·62.5 + 8.33 = 64.6 → 65 (vs 76 when verified)
   await expect(page.locator('.verdict .score-badge')).toHaveText('65', { timeout: 20_000 })
+})
+
+test('an unparseable review is sent back once to be fixed instead of failing', async ({ page }) => {
+  await configureAi(page)
+  const systems: string[] = []
+  await page.route(API + '/chat/completions', async route => {
+    const messages = route.request().postDataJSON().messages
+    systems.push(messages[0].content)
+    // First reply: prose with a broken object; the repair request gets the broken reply, not the paper.
+    if (systems.length === 1) return route.fulfill({ json: { choices: [{ message: { content: 'Here is my review: {"title": "x", "criteria": {"soundness": {"score": four}}' } }] } })
+    expect(messages[1].content).toContain('"score": four')
+    expect(messages[1].content).not.toContain('locality-sensitive')
+    await route.fulfill({ json: { choices: [{ message: { content: reviewJson('reduces memory by 43% on long documents') } }] } })
+  })
+  await page.goto('/')
+  await drop(page, [{ name: 'sparse.pdf', buffer: pdfFixture() }])
+  await expect(page.locator('.verdict .score-badge')).toHaveText('76', { timeout: 20_000 })
+  expect(systems).toHaveLength(2)
+  expect(systems[1]).toContain('could not be used')
+  expect(systems[1]).toContain('"criteria": {"<criterion id>"')
 })
 
 test('image-only pages are rendered and sent to the OCR model', async ({ page }) => {

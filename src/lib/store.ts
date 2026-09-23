@@ -1,4 +1,5 @@
 import type { Paper } from '../types'
+import { isStudy } from './study'
 
 export const STORAGE_KEY = 'tc-papers:reviews-v1'
 const CHANGE_EVENT = 'tc-papers:reviews-changed'
@@ -22,6 +23,7 @@ export function loadPapers(): Paper[] {
       ...p,
       progress: typeof p.progress === 'object' && p.progress ? p.progress : undefined,
       history: Array.isArray(p.history) ? p.history.filter(r => r && typeof r === 'object' && r.criteria) : undefined,
+      study: isStudy(p.study) ? p.study : undefined,
     })) : []
   } catch { return [] }
 }

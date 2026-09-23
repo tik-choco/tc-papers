@@ -71,4 +71,32 @@ export interface Paper {
   history?: ReviewResult[]
   /** Cached result of lib/score.ts for the list view; the detail view recomputes it. */
   score?: { total: number; decision: string; version: number }
+  /** Understanding mode: the story graph and the reader's growing notes. */
+  study?: Study
+}
+
+/** Role a part of the paper plays in its argument. `concept` nodes are added while the reader asks questions. */
+export type StoryKind = 'background' | 'problem' | 'gap' | 'claim' | 'method' | 'experiment' | 'result' | 'limitation' | 'implication' | 'concept'
+
+export interface StoryNode { id: string; kind: StoryKind; label: string; summary: string; pages: number[] }
+export interface StoryEdge { from: string; to: string; label: string }
+
+/** One bullet of the understanding tree. `q` is the question that added it (absent for the initial outline). */
+export interface StudyPoint { id: string; text: string; page: number | null; children: StudyPoint[]; q?: string }
+
+export interface StudyQuestion { id: string; text: string; nodeId: string; askedAt: string; model: string; selection?: string }
+
+export interface Study {
+  createdAt: string
+  model: string
+  /** The paper's story in one sentence. */
+  thesis: string
+  /** In story order. */
+  nodes: StoryNode[]
+  edges: StoryEdge[]
+  /** Bullets per story node id. */
+  tree: Record<string, StudyPoint[]>
+  questions: StudyQuestion[]
+  /** Questions worth asking next, refreshed after every answer. */
+  followUps: string[]
 }

@@ -1,4 +1,4 @@
-import type { CriterionId } from './types'
+import type { CriterionId, StoryKind } from './types'
 import type { Decision } from './lib/score'
 
 export type Locale = 'ja' | 'en'
@@ -21,6 +21,7 @@ export const COPY = {
       PDF_MISSING: 'PDF 本体が見つかりません。もう一度ドロップしてください。',
       PDF_READ_FAILED: 'PDF を読み込めません。破損やパスワード保護を確認してください。',
       PDF_INVALID: '有効な PDF ではありません。', PDF_TOO_LARGE: '50 MB を超えています。', PDF_STORAGE: 'ブラウザーに保存できませんでした。',
+      VIEWER_FILE_MISSING: 'tc-pdf-viewer の PDF 本体を読み込めませんでした。tc-pdf-viewer で一度開いてから選び直してください。',
       UNKNOWN: '処理に失敗しました。',
     } as Record<string, string>,
     decisions: { 'strong-accept': 'Strong Accept', accept: 'Accept', borderline: 'Borderline', 'weak-reject': 'Weak Reject', reject: 'Reject' } as Record<Decision, string>,
@@ -33,7 +34,6 @@ export const COPY = {
     pages: (scan: { pages: number; scannedPages: number; ocrPages: number; truncated: boolean }) => `${scan.pages} ページ` + (scan.truncated ? `（先頭 ${scan.scannedPages} ページを評価）` : '') + (scan.ocrPages ? ` · OCR ${scan.ocrPages} ページ` : ''),
     rerun: '再レビュー', retry: '再試行', open: 'PDF を開く', remove: '削除', confirmRemove: 'もう一度押すと削除', copyMd: 'Markdown をコピー', copied: 'コピーしました',
     duplicate: '登録済みの PDF です', aiSettings: 'AI 接続', aiNote: '「レビュー」と「OCR」に使うモデルを選べます。OCR には画像入力に対応したモデルが必要です。PDF 本文は選択した AI に送信されます。',
-    tasks: { review: 'レビュー', ocr: 'OCR（画像のみのページ）' },
     steps: { scan: '本文スキャン', review: 'AI 査読', score: '採点' },
     progress: {
       queued: '順番待ちです（1 本ずつ処理します）',
@@ -55,6 +55,25 @@ export const COPY = {
     history: '解析履歴', latest: '最新', historyNote: '再レビューしても以前の結果は履歴として残ります。',
     savedNote: '解析結果はこのブラウザーに保存され、tc-storage にも自動でバックアップされます。',
     toDark: 'ダークテーマに切り替え', toLight: 'ライトテーマに切り替え',
+    tasks: { review: 'レビュー', study: '理解モード（未選択ならレビューと同じ）', ocr: 'OCR（画像のみのページ）' },
+    study: {
+      tab: '理解モード', reviewTab: 'レビュー',
+      lead: '論文のストーリー（背景 → 問題 → 手法 → 結果 …）をノードグラフにします。質問するたびに答えが理解ツリーに箇条書きで積み上がり、読み進めるほど理解が深まります。',
+      build: 'ストーリーを可視化する', building: 'ストーリーを組み立てています', rebuild: '作り直す', confirmRebuild: 'もう一度押すと作り直す（ツリーも消えます）',
+      thinking: (chars: number) => `AI が考えています · ${chars.toLocaleString()} 文字受信`,
+      ask: '質問する', askPlaceholder: 'わからないこと・もっと知りたいことを質問', askAbout: (label: string) => `「${label}」について質問（例: なぜそう言えるの？）`,
+      selection: '選択箇所', explainSelection: 'この箇所をわかりやすく説明して',
+      followUps: '次に聞くとよい質問', tree: '理解ツリー', thesis: 'この論文のストーリー',
+      asked: (n: number) => `質問 ${n} 件`, questionBadge: 'この質問で追加',
+      showPdf: 'PDF を表示', hidePdf: 'PDF を隠す', selectHint: 'テキストを選択すると質問に使えます', zoomIn: '拡大', zoomOut: '縮小',
+      notReady: '本文のスキャンが終わると使えます。', copy: 'ノートをコピー',
+      kinds: { background: '背景', problem: '問題', gap: '未解決点', claim: '主張', method: '手法', experiment: '実験', result: '結果', limitation: '限界', implication: '意義', concept: '概念' } as Record<StoryKind, string>,
+    },
+    viewer: {
+      pick: 'tc-pdf-viewer から選ぶ', title: 'tc-pdf-viewer の PDF', search: 'ファイル名で絞り込み', empty: 'tc-pdf-viewer に PDF がありません。',
+      unknown: 'このサイトで tc-pdf-viewer がまだ使われていません。tc-pdf-viewer で PDF を追加すると、ここから選べます。', open: 'tc-pdf-viewer を開く',
+      note: '選んだ PDF は TC Papers にコピーされ、理解モードで開きます（tc-pdf-viewer 側は変更しません）。',
+    },
   },
   en: {
     drop: 'Drop PDFs here to review them automatically', choose: 'Choose files', limit: 'Up to 50 MB per file',
@@ -69,6 +88,7 @@ export const COPY = {
       PDF_MISSING: 'The PDF file is missing. Drop it again.',
       PDF_READ_FAILED: 'Could not read this PDF. Check for corruption or password protection.',
       PDF_INVALID: 'Not a valid PDF.', PDF_TOO_LARGE: 'Larger than 50 MB.', PDF_STORAGE: 'Could not save to browser storage.',
+      VIEWER_FILE_MISSING: 'Could not load this PDF from tc-pdf-viewer. Open it there once, then pick it again.',
       UNKNOWN: 'Processing failed.',
     } as Record<string, string>,
     decisions: { 'strong-accept': 'Strong Accept', accept: 'Accept', borderline: 'Borderline', 'weak-reject': 'Weak Reject', reject: 'Reject' } as Record<Decision, string>,
@@ -81,7 +101,6 @@ export const COPY = {
     pages: (scan: { pages: number; scannedPages: number; ocrPages: number; truncated: boolean }) => `${scan.pages} pages` + (scan.truncated ? ` (first ${scan.scannedPages} reviewed)` : '') + (scan.ocrPages ? ` · OCR ${scan.ocrPages}` : ''),
     rerun: 'Review again', retry: 'Retry', open: 'Open PDF', remove: 'Delete', confirmRemove: 'Click again to delete', copyMd: 'Copy Markdown', copied: 'Copied',
     duplicate: 'Already added', aiSettings: 'AI connection', aiNote: 'Choose models for Review and OCR. OCR needs an image-capable model. PDF text is sent to the selected AI.',
-    tasks: { review: 'Review', ocr: 'OCR (image-only pages)' },
     steps: { scan: 'Scan text', review: 'AI review', score: 'Score' },
     progress: {
       queued: 'Waiting in line (one paper at a time)',
@@ -103,6 +122,25 @@ export const COPY = {
     history: 'Review history', latest: 'Latest', historyNote: 'Earlier results are kept when you review again.',
     savedNote: 'Results are saved in this browser and backed up to tc-storage automatically.',
     toDark: 'Switch to dark theme', toLight: 'Switch to light theme',
+    tasks: { review: 'Review', study: 'Understanding mode (defaults to the review model)', ocr: 'OCR (image-only pages)' },
+    study: {
+      tab: 'Understand', reviewTab: 'Review',
+      lead: 'Maps the story of the paper (background → problem → method → results …) as a node graph. Every question you ask adds its answer as bullets to your understanding tree, so it grows as you read.',
+      build: 'Map the story', building: 'Building the story', rebuild: 'Rebuild', confirmRebuild: 'Click again to rebuild (clears the tree)',
+      thinking: (chars: number) => `AI is thinking · ${chars.toLocaleString()} characters received`,
+      ask: 'Ask', askPlaceholder: 'Ask about anything unclear or worth digging into', askAbout: (label: string) => `Ask about “${label}” (e.g. why does this hold?)`,
+      selection: 'Selection', explainSelection: 'Explain this passage in plain terms',
+      followUps: 'Good next questions', tree: 'Understanding tree', thesis: 'The story of this paper',
+      asked: (n: number) => `${n} question${n === 1 ? '' : 's'}`, questionBadge: 'Added by',
+      showPdf: 'Show PDF', hidePdf: 'Hide PDF', selectHint: 'Select text to ask about it', zoomIn: 'Zoom in', zoomOut: 'Zoom out',
+      notReady: 'Available once the text scan finishes.', copy: 'Copy notes',
+      kinds: { background: 'Background', problem: 'Problem', gap: 'Gap', claim: 'Claim', method: 'Method', experiment: 'Experiment', result: 'Result', limitation: 'Limitation', implication: 'Implication', concept: 'Concept' } as Record<StoryKind, string>,
+    },
+    viewer: {
+      pick: 'Pick from tc-pdf-viewer', title: 'PDFs in tc-pdf-viewer', search: 'Filter by name', empty: 'No PDFs in tc-pdf-viewer yet.',
+      unknown: 'tc-pdf-viewer has not been used on this site yet. Add PDFs there and they show up here.', open: 'Open tc-pdf-viewer',
+      note: 'The PDF is copied into TC Papers and opens in understanding mode (tc-pdf-viewer is not changed).',
+    },
   },
 }
 export type Copy = typeof COPY.ja

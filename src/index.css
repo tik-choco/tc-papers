@@ -1,6 +1,9 @@
 :root {
   --bg: #f7f8f7; --surface: #fff; --text: #1f2a24; --muted: #6b7770; --border: #e2e7e3; --primary: #28684c; --danger: #b64040;
   --d-strong: #1d7a4f; --d-accept: #3d8f5f; --d-border: #b58a1b; --d-weak: #c46a2b; --d-reject: #b64040;
+  /* Story roles in the understanding graph: warm = why, green = how, blue = what it shows. */
+  --k-background: #8a8f8b; --k-problem: #c0533f; --k-gap: #c67a2c; --k-claim: #9a6fb0; --k-method: #28684c; --k-experiment: #3f8a7a;
+  --k-result: #3c6fa8; --k-limitation: #a8841f; --k-implication: #5a5fb0; --k-concept: #6b7770;
   --mistai-border: var(--border); --mistai-surface: var(--surface); --mistai-text: var(--text); --mistai-text-muted: var(--muted); --mistai-text-strong: var(--text); --mistai-primary: var(--primary);
   font-family: Inter, "Segoe UI", "Noto Sans JP", "Yu Gothic UI", sans-serif; color: var(--text); background: var(--bg);
   -webkit-font-smoothing: antialiased; line-height: 1.6;
@@ -8,7 +11,9 @@
 /* Explicit theme toggle (like the other tc apps): light by default, dark via [data-theme="dark"]. */
 :root { color-scheme: light }
 :root[data-theme="dark"] { color-scheme: dark; --bg: #131815; --surface: #1b221e; --text: #e2eae5; --muted: #9aa8a0; --border: #2e3a33; --primary: #8fc9a8; --danger: #f08b8b;
-  --d-strong: #3f9e6e; --d-accept: #4f9a6c; --d-border: #a8841f; --d-weak: #b86a34; --d-reject: #b85454; }
+  --d-strong: #3f9e6e; --d-accept: #4f9a6c; --d-border: #a8841f; --d-weak: #b86a34; --d-reject: #b85454;
+  --k-background: #9aa39d; --k-problem: #e07a66; --k-gap: #e09a55; --k-claim: #b893cc; --k-method: #8fc9a8; --k-experiment: #72bfae;
+  --k-result: #7fa9dc; --k-limitation: #d2b04a; --k-implication: #9a9fe0; --k-concept: #9aa8a0; }
 .small { font-size: .8rem }
 * { box-sizing: border-box }
 body { margin: 0 }
@@ -133,6 +138,115 @@ main { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 4rem }
 .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: .5rem }
 .modal-head h2 { font-size: 1.1rem }
 .ai-settings > .muted { margin-bottom: .75rem }
+
+/* Mode switch */
+.mode-tabs { display: inline-flex; padding: 3px; border-radius: 10px; background: var(--border); gap: 2px }
+.mode-tabs button { display: inline-flex; align-items: center; gap: .3rem; padding: .3rem .75rem; border-radius: 8px; font-size: .86rem; color: var(--muted) }
+.mode-tabs button.active { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px #0001 }
+.primary { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; padding: .55rem 1rem; border-radius: 10px; background: var(--primary); color: var(--surface); font-weight: 600 }
+.primary .spinner { width: 14px; height: 14px; vertical-align: 0 }
+.from-viewer { margin: .6rem auto 0; display: flex; width: fit-content }
+
+/* Understanding mode */
+main.wide { max-width: 1480px }
+.study { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem; align-items: start }
+.study.with-pdf { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) }
+.study-main { min-width: 0 }
+.study-main > section { margin-top: 1rem }
+.study-title { font-size: 1.3rem; line-height: 1.35 }
+.study-intro { display: flex; flex-direction: column; align-items: center; text-align: center; gap: .75rem; padding: 2rem 1.25rem; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; color: var(--primary) }
+.study-intro p { color: var(--text); max-width: 34rem }
+.study-intro .muted { color: var(--muted) }
+.thesis { margin-top: .6rem; padding: .75rem 1rem; border-left: 3px solid var(--primary); background: var(--surface); border-radius: 0 12px 12px 0 }
+.thesis strong { display: block; font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted) }
+
+.graph-scroll { margin-top: 1rem; overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 16px }
+.graph { position: relative; margin: 0 auto }
+.graph svg { position: absolute; inset: 0; overflow: visible }
+.edge path { fill: none; stroke: var(--border); stroke-width: 1.6 }
+.graph marker path { fill: var(--muted); stroke: none }
+.edge.back path { stroke-dasharray: 4 4 }
+.edge.related path { stroke: var(--primary); stroke-width: 2.2 }
+.edge text { font-size: 11px; fill: var(--muted); paint-order: stroke; stroke: var(--surface); stroke-width: 4px }
+.edge.related text { fill: var(--text) }
+.story-node { position: absolute; display: flex; flex-direction: column; justify-content: center; gap: 1px; padding: .35rem .6rem .35rem .8rem; text-align: left; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); border-left: 4px solid var(--k); line-height: 1.25; transition: transform .15s, box-shadow .15s }
+.story-node small { font-size: .68rem; font-weight: 700; letter-spacing: .04em; color: var(--k); text-transform: uppercase }
+.story-node span { font-size: .86rem; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
+.story-node:hover { transform: translateY(-1px); box-shadow: 0 3px 10px #0001 }
+.story-node.selected { background: color-mix(in srgb, var(--k) 14%, var(--surface)); border-color: var(--k); box-shadow: 0 0 0 2px color-mix(in srgb, var(--k) 45%, transparent) }
+.story-node.fresh { animation: pop .9s ease-out }
+@keyframes pop { 0% { transform: scale(.85); opacity: .2 } 60% { transform: scale(1.05) } 100% { transform: none } }
+.k-background { --k: var(--k-background) } .k-problem { --k: var(--k-problem) } .k-gap { --k: var(--k-gap) } .k-claim { --k: var(--k-claim) }
+.k-method { --k: var(--k-method) } .k-experiment { --k: var(--k-experiment) } .k-result { --k: var(--k-result) } .k-limitation { --k: var(--k-limitation) }
+.k-implication { --k: var(--k-implication) } .k-concept { --k: var(--k-concept) }
+
+.focus { padding: .85rem 1rem; background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--k); border-radius: 14px }
+.focus small { font-size: .72rem; font-weight: 700; color: var(--k); text-transform: uppercase; letter-spacing: .05em }
+.focus h2 { font-size: 1.05rem; margin: .1rem 0 .25rem }
+.focus .pages { margin-top: .4rem; display: flex; gap: .3rem; flex-wrap: wrap }
+.page-ref { display: inline-block; margin-left: .35rem; padding: 0 .4rem; border-radius: 6px; font-size: .75rem; color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); font-variant-numeric: tabular-nums }
+.focus .page-ref { margin-left: 0 }
+.page-ref:hover { background: color-mix(in srgb, var(--primary) 22%, transparent) }
+
+.tree { padding: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 14px }
+.tree h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: .5rem }
+.tree ul { margin: 0; padding-left: 1.1rem }
+.tree-root { list-style: none; padding: 0 !important }
+.tree-root > li { padding: .35rem .5rem; border-radius: 10px }
+.tree-root > li + li { margin-top: .15rem }
+.tree-root > li.current { background: color-mix(in srgb, var(--primary) 7%, transparent) }
+.tree li li { margin-top: .2rem; font-size: .92rem }
+.tree li li li { color: color-mix(in srgb, var(--text) 82%, var(--muted)) }
+.node-head { display: flex; align-items: center; gap: .45rem; font-weight: 600; text-align: left }
+.node-head i { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--k) }
+.node-head small { color: var(--muted); font-weight: 400; font-size: .75rem }
+.pt { border-radius: 6px }
+.tree li.fresh > .pt { animation: glow 2.4s ease-out }
+@keyframes glow { from { background: color-mix(in srgb, var(--primary) 28%, transparent) } to { background: transparent } }
+.q-badge { display: inline-block; margin-right: .35rem; padding: 0 .35rem; border-radius: 6px; font-size: .7rem; font-weight: 700; color: var(--surface); background: var(--primary); vertical-align: 1px; cursor: help }
+
+.ask { position: sticky; bottom: 0; margin-top: 1rem; padding: .75rem 0 1rem; background: linear-gradient(transparent, var(--bg) 18%) }
+.ask-row { display: flex; gap: .5rem; align-items: flex-end }
+.ask textarea { flex: 1; min-width: 0; resize: vertical; padding: .6rem .75rem; border: 1px solid var(--border); border-radius: 12px; background: var(--surface) }
+.ask textarea:focus { outline: 2px solid var(--primary); outline-offset: 0 }
+.send { width: 44px; height: 44px; padding: 0 }
+.follow-ups { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .5rem }
+.follow-ups button { padding: .3rem .7rem; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); font-size: .82rem; text-align: left }
+.follow-ups button:hover { border-color: var(--primary); color: var(--primary) }
+.selection-chip { display: flex; align-items: flex-start; gap: .4rem; margin-bottom: .5rem; padding: .4rem .5rem .4rem .75rem; border-radius: 10px; background: color-mix(in srgb, var(--primary) 9%, var(--surface)); font-size: .85rem }
+.selection-chip span { flex: 1; min-width: 0 }
+.selection-chip .icon { width: 26px; height: 26px }
+
+.pdf-pane { position: sticky; top: .5rem; display: flex; flex-direction: column; height: calc(100vh - 5rem); background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden }
+.pdf-bar { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .25rem .5rem .25rem .9rem; border-bottom: 1px solid var(--border) }
+.pdf-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.pdf-zoom { display: flex }
+.pdf-scroll { flex: 1; overflow: auto; padding: 12px; background: color-mix(in srgb, var(--border) 55%, var(--bg)) }
+.pdf-page { position: relative; margin: 0 auto 12px; background: #fff; box-shadow: 0 1px 3px #0002 }
+.pdf-page canvas { display: block; width: 100%; height: 100% }
+.pdf-empty { text-align: center; padding: 3rem 1rem }
+/* Minimal pdf.js text layer (from pdfjs-dist/web/pdf_viewer.css) so text in the PDF can be selected. */
+.textLayer { position: absolute; inset: 0; overflow: clip; line-height: 1; text-align: initial; text-size-adjust: none; forced-color-adjust: none; transform-origin: 0 0; z-index: 0 }
+.textLayer :is(span, br) { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0% }
+.textLayer span.markedContent { top: 0; height: 0 }
+.textLayer ::selection { background: color-mix(in srgb, #2a7cff 30%, transparent) }
+.textLayer br::selection { background: transparent }
+.textLayer .endOfContent { display: block; position: absolute; inset: 100% 0 0; z-index: 0; cursor: default; user-select: none }
+
+.picker { width: min(560px, 100%) }
+.picker > .muted { margin-bottom: .75rem }
+.picker-search { width: 100%; margin-bottom: .6rem; padding: .45rem .7rem; border: 1px solid var(--border); border-radius: 10px; background: var(--bg) }
+.picker-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 12px; max-height: 60vh; overflow-y: auto }
+.picker-list li + li { border-top: 1px solid var(--border) }
+.picker-list button { width: 100%; display: flex; align-items: center; gap: .75rem; padding: .65rem .9rem; text-align: left; color: var(--text) }
+.picker-list button > svg { flex: none; color: var(--muted) }
+.picker-list button:hover:not(:disabled) { background: color-mix(in srgb, var(--border) 45%, transparent) }
+.picker-empty { display: flex; flex-direction: column; align-items: center; gap: .5rem; padding: 1.5rem 1rem; text-align: center }
+
+@media (max-width: 959px) {
+  .study.with-pdf { grid-template-columns: minmax(0, 1fr) }
+  .study.with-pdf .pdf-pane { position: relative; top: 0; height: 70vh; order: 2 }
+}
 
 @media (max-width: 640px) {
   .two-col { grid-template-columns: 1fr }

@@ -5,6 +5,7 @@ import { getPdf } from '../lib/pdf'
 import { DECISION_BANDS, scoreReview, type ScoreBreakdown } from '../lib/score'
 import type { Copy as CopyText } from '../copy'
 import { ProgressView } from './ProgressView'
+import { ModeTabs, type Mode } from './StudyView'
 
 export function ScoreBadge({ score }: { score: ScoreBreakdown }) {
   return <span class={`score-badge d-${score.decision}`}>{score.total}</span>
@@ -79,7 +80,7 @@ function Grounds({ score, t }: { score: ScoreBreakdown; t: CopyText }) {
   </section>
 }
 
-export function ReviewView({ paper, t, onBack, onRerun, onRemove }: { paper: Paper; t: CopyText; onBack: () => void; onRerun: () => void; onRemove: () => void }) {
+export function ReviewView({ paper, t, onBack, onMode, onRerun, onRemove }: { paper: Paper; t: CopyText; onBack: () => void; onMode: (mode: Mode) => void; onRerun: () => void; onRemove: () => void }) {
   const [text, setText] = useState<string | null>(null)
   const [url, setUrl] = useState('')
   const [confirming, setConfirming] = useState(false)
@@ -104,6 +105,7 @@ export function ReviewView({ paper, t, onBack, onRerun, onRemove }: { paper: Pap
   return <article class="review">
     <div class="review-top">
       <button class="ghost" onClick={onBack}><ArrowLeft size={16} />{t.back}</button>
+      <ModeTabs mode="review" t={t} onMode={onMode} />
       <div class="actions">
         {url && <a class="ghost" href={url} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} />{t.open}</a>}
         {r && score && <button class="ghost" onClick={() => { void navigator.clipboard.writeText(toMarkdown(paper, r, score, t)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) }) }}>{copied ? <Check size={15} /> : <Copy size={15} />}{copied ? t.copied : t.copyMd}</button>}

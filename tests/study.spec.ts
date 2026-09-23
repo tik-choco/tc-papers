@@ -1,0 +1,155 @@
+import { test, expect, type Page } from '@playwright/test'
+import { pdfFixture } from './pdf-fixture'
+
+const API = 'http://127.0.0.1:12345/v1'
+const CRITERIA = ['soundness', 'evidence', 'novelty', 'significance', 'clarity', 'reproducibility']
+const review = JSON.stringify({
+  title: 'Sparse attention', summary: 's', strengths: [], weaknesses: [], questions: [], fatalFlaws: [],
+  criteria: Object.fromEntries(CRITERIA.map(id => [id, { score: 4, confidence: 3, rationale: 'r', evidence: [{ page: 1, quote: 'reduces memory by 43% on long documents' }] }])),
+})
+const story = JSON.stringify({
+  thesis: 'Hashing tokens into buckets makes attention on long documents cheap.',
+  nodes: [
+    { id: 'p', kind: 'problem', label: 'Attention is quadratic', summary: 'Memory grows with the square of the length.', pages: [1], points: [{ text: 'Dense attention compares every pair', page: 1 }] },
+    { id: 'm', kind: 'method', label: 'LSH buckets', summary: 'Similar tokens share a bucket.', pages: [1], points: [{ text: 'Replaces dense attention', page: 1 }] },
+    { id: 'r', kind: 'result', label: '43% less memory', summary: 'Consistent gains on three benchmarks.', pages: [1], points: [] },
+    { id: 'l', kind: 'limitation', label: 'English only', summary: 'Other languages untested.', pages: [1], points: [] },
+  ],
+  edges: [{ from: 'p', to: 'm', label: 'addressed by' }, { from: 'm', to: 'r', label: 'shows' }, { from: 'r', to: 'l', label: 'limited by' }],
+  followUps: ['Why does hashing keep quality?'],
+})
+
+async function setup(page: Page) {
+  const asks: string[] = []
+  await page.addInitScript(api => localStorage.setItem('tc-shared-llm-config-v1', JSON.stringify({
+    v: 1, providers: [{ id: 'test', label: 'Test', baseUrl: api, apiKey: 'test' }],
+    presets: [{ id: 'model', label: 'Test model', providerId: 'test', model: 'fixture' }], defaultPresetId: 'model',
+    network: { roomId: '' }, updatedAt: new Date().toISOString(),
+  })), API)
+  await page.route(API + '/chat/completions', async route => {
+    const messages = route.request().postDataJSON().messages
+    const system = String(messages[0].content)
+    if (system.includes('patient tutor')) {
+      asks.push(messages[1].content)
+      const parent = /\[#(\w+)\] Replaces dense attention/.exec(messages[1].content)?.[1]
+      const content = asks.length === 1
+        ? { nodeId: 'n2', parentId: parent, points: [{ text: 'Tokens are hashed so neighbours collide', page: 1, children: [{ text: 'Only same-bucket pairs are compared' }] }], followUps: ['What is a bucket?'] }
+        : { nodeId: null, newNode: { kind: 'concept', label: 'Hash bucket', summary: 'A group of similar tokens.', from: 'n2', edgeLabel: 'uses' }, points: [{ text: 'A bucket groups similar vectors', page: 1 }], followUps: [] }
+      return route.fulfill({ json: { choices: [{ message: { content: JSON.stringify(content) } }] } })
+    }
+    await route.fulfill({ json: { choices: [{ message: { content: system.includes('story') ? story : review } }] } })
+  })
+  return asks
+}
+
+test('understanding mode maps the story and grows the tree with every question', async ({ page }) => {
+  const asks = await setup(page)
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await page.goto('/')
+  await page.locator('input[type=file]').setInputFiles({ name: 'sparse.pdf', mimeType: 'application/pdf', buffer: pdfFixture() })
+  await expect(page.locator('.verdict .score-badge')).toHaveText(/\d+/, { timeout: 20_000 })
+
+  await page.getByRole('tab', { name: 'Understand' }).click()
+  await expect(page).toHaveURL(/mode=study/)
+  await expect(page.locator('.pdf-page canvas').first()).toBeVisible({ timeout: 20_000 })
+  await expect(page.locator('.textLayer span').first()).toBeAttached()
+  await page.getByRole('button', { name: 'Map the story' }).click()
+  await expect(page.locator('.story-node')).toHaveCount(4, { timeout: 20_000 })
+  await expect(page.locator('.edge')).toHaveCount(3)
+  await expect(page.locator('.thesis')).toContainText('Hashing tokens')
+
+  // A question nests its answer under the bullet the model points at.
+  await page.locator('.story-node', { hasText: 'LSH buckets' }).click()
+  await page.getByRole('textbox', { name: 'Ask' }).fill('How does hashing help?')
+  await page.keyboard.press('Enter')
+  const answer = page.locator('.tree li.fresh', { hasText: 'Tokens are hashed so neighbours collide' })
+  await expect(answer).toBeVisible({ timeout: 20_000 })
+  await expect(answer.locator('.q-badge')).toHaveText('Q1')
+  await expect(page.locator('.tree .q-badge')).toHaveCount(1)
+  await expect(answer.locator('li')).toHaveText('Only same-bucket pairs are compared')
+  await expect(page.locator('.tree li:has(> ul > li.fresh) > .pt')).toContainText('Replaces dense attention')
+  expect(asks[0]).toContain('The reader is looking at node [n2] LSH buckets')
+  expect(asks[0]).toContain('Question: How does hashing help?')
+
+  // A follow-up about something new adds a concept node to the graph.
+  await page.getByRole('button', { name: 'What is a bucket?' }).click()
+  await expect(page.locator('.story-node')).toHaveCount(5, { timeout: 20_000 })
+  await expect(page.locator('.story-node.selected')).toContainText('Hash bucket')
+  await expect(page.locator('.tree .q-badge')).toHaveCount(2)
+
+  // Selecting text in the PDF attaches it to the next question.
+  await page.locator('.textLayer span').first().selectText()
+  await page.locator('.pdf-scroll').dispatchEvent('mouseup')
+  await expect(page.locator('.selection-chip')).toBeVisible()
+  await page.screenshot({ path: '.test-output/study.png', fullPage: true })
+
+  await page.reload()
+  await expect(page.locator('.story-node')).toHaveCount(5)
+  await expect(page.locator('.tree .q-badge')).toHaveCount(2)
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: '.test-output/study-mobile.png', fullPage: true })
+  expect(errors).toEqual([])
+})
+
+test('a reply in its own schema is converted to the story graph instead of failing', async ({ page }) => {
+  await setup(page)
+  const requests: { system: string; user: string }[] = []
+  // Registered after setup's route, so it is tried first; review requests fall through to setup's handler.
+  await page.route(API + '/chat/completions', async route => {
+    const messages = route.request().postDataJSON().messages
+    const system = String(messages[0].content)
+    if (!system.includes('story') && !system.includes('could not be used')) return route.fallback()
+    requests.push({ system, user: messages[1].content })
+    // Like a real model that ignored the format: valid JSON, its own keys.
+    const content = requests.length === 1
+      ? JSON.stringify({ research_findings: { network_performance_metrics: [{ metric: 'Latency', papers_count: 25 }], challenges: ['Lack of user studies'] } })
+      : story
+    await route.fulfill({ json: { choices: [{ message: { content } }] } })
+  })
+  await page.goto('/')
+  await page.locator('input[type=file]').setInputFiles({ name: 'sparse.pdf', mimeType: 'application/pdf', buffer: pdfFixture() })
+  await expect(page.locator('.verdict .score-badge')).toHaveText(/\d+/, { timeout: 20_000 })
+  await page.getByRole('tab', { name: 'Understand' }).click()
+  await page.getByRole('button', { name: 'Map the story' }).click()
+  await expect(page.locator('.story-node')).toHaveCount(4, { timeout: 20_000 })
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  expect(requests).toHaveLength(2)
+  // The format is repeated after the paper, and the repair gets the target schema plus only the bad reply.
+  expect(requests[0]!.user.trimEnd()).toMatch(/"followUps": string\[\]\}$/)
+  expect(requests[1]!.system).toContain('"nodes": [{"id": string')
+  expect(requests[1]!.user).toContain('research_findings')
+  expect(requests[1]!.user).not.toContain('locality-sensitive')
+})
+
+test('PDFs from tc-pdf-viewer can be picked and open in understanding mode', async ({ page }) => {
+  await setup(page)
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Pick from tc-pdf-viewer' }).click()
+  await expect(page.getByRole('dialog')).toContainText('tc-pdf-viewer has not been used on this site yet')
+  await page.keyboard.press('Escape')
+
+  // Seed the library the way tc-pdf-viewer's savePdf does: bytes in the mistlib CID store, pointer in mist_files_index.
+  const bytes = [...pdfFixture('From the viewer')]
+  await page.evaluate(async data => {
+    const mist = await import('/src/lib/mist.ts')
+    const lib = await import('/src/vendor/mistlib/index.js')
+    await mist.ensureMistStorage()
+    const cid = await lib.storage_add('viewer.pdf', new Uint8Array(data))
+    localStorage.setItem('mist_files_index', JSON.stringify([{ name: 'viewer.pdf', cid, folder: 'Research', createdAt: 1, updatedAt: 2 }, { broken: true }]))
+  }, bytes)
+  await page.getByRole('button', { name: 'Pick from tc-pdf-viewer' }).click()
+  await expect(page.locator('.picker-list li')).toHaveCount(1)
+  await page.locator('.picker-list button', { hasText: 'viewer.pdf' }).click()
+  await expect(page).toHaveURL(/mode=study/, { timeout: 20_000 })
+  await expect(page.locator('.pdf-page canvas').first()).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByRole('button', { name: 'Map the story' })).toBeVisible({ timeout: 20_000 })
+  // Picking it again opens the existing paper instead of adding a duplicate.
+  await page.getByRole('button', { name: 'All papers' }).click()
+  await page.getByRole('button', { name: 'Pick from tc-pdf-viewer' }).click()
+  await page.locator('.picker-list button', { hasText: 'viewer.pdf' }).click()
+  await expect(page).toHaveURL(/mode=study/)
+  await page.getByRole('button', { name: 'All papers' }).click()
+  await expect(page.locator('.papers li')).toHaveCount(1)
+})

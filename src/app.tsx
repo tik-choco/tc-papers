@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { FileUp, Moon, Settings2, Sun, X } from 'lucide-preact'
+import { FileUp, Library, Moon, Settings2, Sun, X } from 'lucide-preact'
 import type { Paper } from './types'
 import { COPY, detectLocale } from './copy'
 import { loadPapers, mutatePapers, patchPaper, subscribePapers } from './lib/store'
@@ -8,16 +8,23 @@ import { isPending, processPaper } from './lib/queue'
 import { writeAppManifest } from './lib/appManifest'
 import { AiSettings, useAiNetwork } from './components/AiSettings'
 import { ReviewView } from './components/ReviewView'
+import { StudyView, type Mode } from './components/StudyView'
+import { ViewerPicker } from './components/ViewerPicker'
+import { PDF_VIEWER_INDEX_KEY } from './lib/pdfViewerLibrary'
 import { progressText } from './components/ProgressView'
 import { useTheme } from './hooks/useTheme'
 
-const readHash = () => new URLSearchParams(location.hash.slice(1)).get('paper') || ''
+const hashParams = () => new URLSearchParams(location.hash.slice(1))
+const readHash = () => hashParams().get('paper') || ''
+const readMode = (): Mode => hashParams().get('mode') === 'study' ? 'study' : 'review'
 
 export function App() {
   const [locale] = useState(detectLocale)
   const t = COPY[locale]
   const [papers, setPapers] = useState(loadPapers)
   const [selectedId, setSelectedId] = useState(readHash)
+  const [mode, setMode] = useState(readMode)
+  const [picker, setPicker] = useState(false)
   const [settings, setSettings] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [notice, setNotice] = useState('')
@@ -30,11 +37,11 @@ export function App() {
   useEffect(() => { document.documentElement.lang = locale }, [locale])
   useEffect(() => subscribePapers(() => setPapers(loadPapers())), [])
   useEffect(() => {
-    const onHash = () => setSelectedId(readHash())
+    const onHash = () => { setSelectedId(readHash()); setMode(readMode()) }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
-  useEffect(() => { writeAppManifest({ app: 'tc-papers', version: '0.1.0', publishes: ['papers-backup'], consumes: [], reads: ['tc-shared-llm-config-v1'] }) }, [])
+  useEffect(() => { writeAppManifest({ app: 'tc-papers', version: '0.1.0', publishes: ['papers-backup'], consumes: [], reads: ['tc-shared-llm-config-v1', PDF_VIEWER_INDEX_KEY] }) }, [])
   useEffect(() => {
     if (!settings) return
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSettings(false) }
@@ -56,10 +63,10 @@ export function App() {
     void processPaper(next, locale).finally(() => { running.current = false; setTick(n => n + 1) })
   }, [papers, network.config, network.preferences, tick])
 
-  function select(id: string) {
-    setSelectedId(id)
+  function select(id: string, nextMode: Mode = 'review') {
+    setSelectedId(id); setMode(nextMode)
     const url = new URL(location.href)
-    url.hash = id ? new URLSearchParams({ paper: id }).toString() : ''
+    url.hash = id ? new URLSearchParams({ paper: id, ...(nextMode === 'study' ? { mode: 'study' } : {}) }).toString() : ''
     history.replaceState(null, '', url)
   }
 
@@ -81,6 +88,15 @@ export function App() {
     }
     if (errors.length) setNotice(errors.join(' / '))
     if (files.length === 1 && firstId) select(firstId)
+  }
+
+  /** A PDF picked in tc-pdf-viewer joins the list like a dropped file, then opens in understanding mode. */
+  async function importFromViewer(file: File) {
+    const { id } = await acceptPdf(file)
+    if (!loadPapers().some(p => p.id === id)) await addFiles([file])
+    if (!loadPapers().some(p => p.id === id)) return
+    setPicker(false)
+    select(id, 'study')
   }
 
   async function rerun(paper: Paper) {
@@ -113,13 +129,15 @@ export function App() {
       </div>
     </header>
 
-    <main>
-      {selected ? <ReviewView paper={selected} t={t} onBack={() => select('')} onRerun={() => void rerun(selected)} onRemove={() => remove(selected)} /> : <>
+    <main class={selected && mode === 'study' ? 'wide' : ''}>
+      {selected && mode === 'study' ? <StudyView paper={selected} t={t} locale={locale} onBack={() => select('')} onMode={m => select(selected.id, m)} />
+        : selected ? <ReviewView paper={selected} t={t} onBack={() => select('')} onMode={m => select(selected.id, m)} onRerun={() => void rerun(selected)} onRemove={() => remove(selected)} /> : <>
         <button class="dropzone" onClick={() => fileRef.current?.click()}>
           <FileUp size={28} strokeWidth={1.5} />
           <strong>{t.drop}</strong>
           <span class="muted">{t.choose} · {t.limit}</span>
         </button>
+        <button class="ghost from-viewer" onClick={() => setPicker(true)}><Library size={15} />{t.viewer.pick}</button>
         {papers.length > 0 && <ul class="papers">
           {papers.map(paper => <li key={paper.id}>
             <button onClick={() => select(paper.id)}>
@@ -139,6 +157,7 @@ export function App() {
     <input ref={fileRef} type="file" accept=".pdf,application/pdf" multiple hidden onChange={e => { void addFiles(Array.from(e.currentTarget.files || [])); e.currentTarget.value = '' }} />
     {dragging && <div class="drop-overlay"><FileUp size={40} strokeWidth={1.5} /><strong>{t.drop}</strong></div>}
     {notice && <div class="toast" role="alert"><span>{notice}</span><button class="icon" aria-label={t.close} onClick={() => setNotice('')}><X size={15} /></button></div>}
+    {picker && <ViewerPicker t={t} onPick={importFromViewer} onClose={() => setPicker(false)} />}
     {settings && <div class="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setSettings(false) }}>
       <div class="modal" role="dialog" aria-modal="true" aria-label={t.settings}>
         <div class="modal-head"><h2>{t.aiSettings}</h2><button class="icon" aria-label={t.close} onClick={() => setSettings(false)}><X size={18} /></button></div>
