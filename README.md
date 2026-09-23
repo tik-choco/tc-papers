@@ -1,85 +1,33 @@
 # TC Papers
 
-PDF をドロップすると、自動でスキャンして AI レビューとスコアを付ける Web アプリです。
+English | [日本語](README.ja.md) | [中文](README.zh.md)
 
-公開版: https://tik-choco.github.io/tc-papers/
+Read research papers with AI. Drop a PDF to get a reviewer-style score, or explore the paper's story as a graph by asking questions.
 
-## 流れ
+Live: https://tik-choco.github.io/tc-papers/
 
-1. PDF をドロップ（またはクリックして選択）。1 ファイル 50 MB まで、複数可。同じ PDF（SHA-256 一致）は二重登録しません。
-2. **スキャン**: PDF.js でテキスト層を読みます。文字がほぼ無いページ（40 文字未満）だけ画像化し、OCR モデルに送ります（tc-pdf-viewer と同じ、ページ単位の画像 OCR）。先頭 40 ページ・120,000 文字まで。
-3. **レビュー**: 本文を AI に送り、6 観点を 1–5 で採点させます。各観点には本文からの逐語引用（ページ付き）と「なぜこの点で、1 つ上ではないか」の理由を要求します。
-   査読者は「論文を救う」方針です。強みを具体的に拾い、弱点は必ず実行可能な改善案とセットで返させます（ページ・節付きの詳細コメント 5–15 件、採択に近づける優先順位付きの手順、総評）。優しさはコメント側だけで、点数は根拠照合で補正するため甘くなりません。
-4. **スコア**: 最終スコアはローカルの評価関数（`src/lib/score.ts`）で算出します。AI の自己申告スコアはそのまま使いません。
+## Features
 
-処理中は「本文スキャン → AI 査読 → 採点」のどこにいるか、ページ番号・OCR 中のページ・送信文字数・AI が今書いている項目（例: 新規性、詳細コメント）・受信文字数・経過時間を一覧と詳細の両方に表示します。
-
-詳細画面の「判定根拠」には、観点ごとの AI 評価・根拠確認数・補正後の値・重み・寄与点、構成チェックの寄与、小計、上限の適用理由、どの判定帯に入ったか、信頼度の内訳をすべて表示します（Markdown コピーにも含みます）。
-
-AI 未設定なら待機し、設定すると自動で再開します。
-
-処理は途中から再開できます。スキャンはページ単位で保存するため、タブを閉じたり OCR が失敗したりしても、次回は終わったページを飛ばして続きから読みます（再試行で送り直すのは OCR に失敗したページだけ）。AI 査読で失敗した場合、「再試行」はスキャン結果を使い回して査読だけやり直します。画像のみの PDF は OCR 用モデルを設定すると自動で再スキャンします。
-
-## 理解モード
-
-詳細画面の「理解モード」タブで、論文を読み解くためのモードに切り替えます（URL `#paper=<id>&mode=study`）。
-
-- **ストーリーグラフ**: 「ストーリーを可視化する」で、論文の論理の流れ（背景 → 問題 → 未解決点 → 主張 → 手法 → 実験 → 結果 → 限界 → 意義）を 6–12 ノードの有向グラフにします。エッジには「〜で解決」「〜を示す」などの関係名が付きます。ノードをクリックすると要約と該当ページが出ます。
-- **理解ツリー**: 各ノードの下に要点の箇条書きがあり、質問するたびに AI の答えがツリーに追加されます。AI は既存の箇条書き ID を見て「どの項目の詳しい説明か」を選んで入れ子にし、グラフに無い用語・概念の質問なら「概念」ノードをグラフに追加します。質問で増えた項目には Q1, Q2… の印が付き、次に聞くとよい質問も提案されます。
-- **PDF 表示**: 左に PDF（pdf.js）を表示し、ページ参照（p.3 など）をクリックするとそのページへ移動します。PDF 上でテキストを選択すると、その箇所を質問に添えられます。
-- **パネル配置**: PDF / ストーリー / 選択中のノード / 理解ツリー / 質問 は独立したパネルで、画面いっぱいにタイル表示されます（ページ自体はスクロールしません）。見出しをドラッグして別パネルの上半分・下半分に落とすと上下に積み、左右の端に落とすと列を分けます（最大 4 列、落とし先は青くプレビュー）。パネル間の隙間をドラッグで大きさ変更、ダブルクリックで均等化。見出しのボタンで折りたたみ・非表示、隠したパネルは上部のチップで戻せます。見出しの最大化ボタン（または見出しのダブルクリック）で一時的に 1 パネルを作業領域いっぱいに広げ、もう一度押すか Esc で戻ります（保存されない一時表示。他パネルは状態を保ったまま下に残る。元の枠から広がり元の枠へ縮むイージング付きアニメーションで、中身は歪ませず表示範囲だけを動かす。OS の「視差効果を減らす」設定時はアニメーションなし。スマホでは全画面）。配置は `tc-papers:study-layout-v1` に保存され、「レイアウトを戻す」で初期状態に戻ります。狭い画面では縦に並びます。
-- 結果は論文ごとに `study` として `tc-papers:reviews-v1` に保存され、tc-storage バックアップにも含まれます。「ノートをコピー」で Markdown にできます。
-- **出力言語**: ツールバーで日本語 / English / 简体中文 / 繁體中文 / 한국어 を選べます（論文や画面の言語とは独立。初期値はブラウザの言語、選択は `tc-papers:study-lang-v1` に保存）。英語論文でも選んだ言語で書き、訳した専門用語には初出で原語を括弧で添えます。既存ノートと違う言語を選ぶと「翻訳」ボタンが出て、グラフ・ツリー・質問をツリー構造を保ったまま訳せます。
-- AI タスク「理解モード」でモデルを選べます（未選択ならレビューと同じモデル）。
-
-### tc-pdf-viewer との連携
-
-一覧の「tc-pdf-viewer から選ぶ」で、同じオリジンの tc-pdf-viewer に保存された PDF を選べます。tc-pdf-viewer の `mist_files_index`（読み取りのみ）から一覧を出し、本体を mistlib の CID ストア（`storage_get`）から読み込んで TC Papers にコピーし、理解モードで開きます。tc-pdf-viewer 側のデータは変更しません。
-
-## 評価関数
-
-| 観点 | 重み |
-|---|---|
-| 技術的妥当性 soundness | 25% |
-| 実証の強さ evidence | 20% |
-| 新規性 novelty | 20% |
-| 重要性 significance | 15% |
-| 明瞭さ clarity | 10% |
-| 再現性 reproducibility | 10% |
-
-1. **根拠の照合**: AI が挙げた引用を抽出本文と照合します（空白・記号・大小文字を無視、OCR 揺れを許容する 12 文字チャンクの 70% 一致）。観点ごとに確認率 v を出し、中立 3 からの距離を `k = 0.5 + 0.5v` 倍します。根拠なし・捏造引用の評価は 3 側へ半分戻ります（高評価も低評価も同じ扱い）。
-2. **重み付き平均**を 0–100 に換算（90%）。
-3. **構成チェック**（要旨・手法・実験/結果・限界・参考文献・コード/データ公開を本文から検出）を 10%。
-4. **上限**: 技術的妥当性が補正後 2 未満なら 40、致命的欠陥（fatalFlaws）があれば 45。
-5. **判定**: 80 以上 Strong Accept / 65 Accept / 50 Borderline / 35 Weak Reject / それ未満 Reject。
-6. **信頼度**（スコアには影響しない）: AI の自己申告確信度 × 引用確認率、打ち切り・OCR 主体の入力で減衰。
-
-保存するのは AI の生の判定だけで、スコアは表示時に再計算します（一覧用にキャッシュも保持）。
+- **Review**: the AI rates six criteria (soundness, evidence, novelty, significance, clarity, reproducibility) with quotes from the paper. The final 0–100 score is computed locally, and ratings whose quotes can't be found in the text are pulled back toward neutral.
+- **Understanding mode**: turns the paper into a story graph (problem → method → result → …). Every question you ask adds its answer to an understanding tree, next to the PDF.
+- **OCR**: image-only pages are read by an image-capable model.
+- **tc-pdf-viewer**: import PDFs you already have in tc-pdf-viewer.
+- **Local first**: PDFs and results stay in the browser, and results are backed up to tc-storage automatically.
 
 ## AI
 
-設定は他の tc アプリと同じ mistai 共通 UI（直接 API / AI Network / provider 提供、`tc-shared-llm-config-v1` 共有）。タスクは「レビュー」と「OCR」の 2 つで、OCR には画像入力対応モデルが必要です。PDF 本文とスキャン画像は選択した AI に送信されます。
+Uses the shared mistai settings of the tc apps: any OpenAI-compatible API, or AI Network (P2P). A setup guide opens on first launch. The PDF text and page images are sent to the AI you choose.
 
-## 保存
+## Development
 
-- 論文一覧・レビュー結果: localStorage `tc-papers:reviews-v1`。再レビューしても以前の結果は `history` に最新 10 件まで残り、詳細画面で切り替えられます
-- tc-storage へ自動バックアップ（shared bus topic `papers-backup`、他の tc アプリと同じ暗号化スナップショット方式。PDF 本体は含みません）
-- テーマ: localStorage `tc-papers:theme`（既定はライト、右上で切り替え）
-- PDF 本体・抽出テキスト: IndexedDB `tc-papers:pdfs-v1`（store `pdfs`）。スキャン途中のページは store `scans` に保存し、全ページ揃ったら削除
-
-## 開発
-
-~~~powershell
+```sh
 npm install
 npm run dev
 npm test
-npm run build
-$env:PLAYWRIGHT_CHROMIUM_EXECUTABLE = 'C:\Program Files\Google\Chrome\Application\chrome.exe'  # 任意
 npm run test:e2e
-~~~
+npm run build   # VITE_BASE_PATH=/tc-papers/ for a subpath
+```
 
-predev / prebuild で PDF.js の CMaps・標準フォント・WASM を public/pdfjs/ に準備します。サブパス配置は `VITE_BASE_PATH=/tc-papers/` でビルドします。
-
-## ライセンス
+## License
 
 [MIT](LICENSE)

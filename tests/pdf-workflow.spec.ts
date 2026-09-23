@@ -2,6 +2,9 @@ import { test, expect, type Page } from '@playwright/test'
 import { BODY, pdfFixture } from './pdf-fixture'
 
 const API = 'http://127.0.0.1:12345/v1'
+
+// The first-run wizard would cover the page; it has its own spec (onboarding.spec.ts).
+test.beforeEach(({ page }) => page.addInitScript(() => localStorage.setItem('tc-papers:onboarding-done', '1')))
 const CRITERIA = ['soundness', 'evidence', 'novelty', 'significance', 'clarity', 'reproducibility']
 
 function reviewJson(quote: string) {

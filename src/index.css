@@ -140,6 +140,44 @@ main { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 4rem }
 .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: .5rem }
 .modal-head h2 { font-size: 1.1rem }
 .ai-settings > .muted { margin-bottom: .75rem }
+.modal-foot { display: flex; justify-content: flex-end; margin-top: 1rem; padding-top: .75rem; border-top: 1px solid var(--border) }
+
+/* First-run onboarding wizard (components/Onboarding.tsx) */
+.ob-card { position: relative; width: min(560px, 100%); max-height: min(90vh, 720px); display: flex; flex-direction: column; border-radius: 16px; background: var(--surface); box-shadow: 0 12px 40px #0003; overflow: hidden; animation: ob-in .18s ease-out }
+@keyframes ob-in { from { opacity: 0; transform: scale(.97) } }
+.ob-close { position: absolute; top: .6rem; right: .6rem }
+.ob-body { display: flex; flex-direction: column; gap: .85rem; padding: 1.75rem 1.5rem 1.25rem; overflow-y: auto }
+.ob-body > p { line-height: 1.75 }
+.ob-hero { display: flex; justify-content: center; color: var(--primary); padding-top: .5rem }
+.ob-hero > svg, .ob-step-head > svg { box-sizing: content-box; flex: none; border-radius: 50%; background: color-mix(in srgb, var(--primary) 14%, transparent) }
+.ob-hero > svg { padding: 1rem }
+.ob-step-head { display: flex; align-items: center; gap: .65rem; color: var(--primary); padding-right: 2rem }
+.ob-step-head > svg { padding: .45rem }
+.ob-title { font-size: 1.25rem; text-align: center }
+.ob-step-head .ob-title { font-size: 1.1rem; text-align: left; color: var(--text) }
+.ob-field { display: flex; flex-direction: column; gap: .25rem }
+.ob-field > span { font-size: .85rem; font-weight: 600 }
+.ob-input { width: 100%; min-width: 0; padding: .5rem .7rem; border: 1px solid var(--border); border-radius: 10px; background: var(--bg) }
+.ob-input:focus { outline: 2px solid var(--primary); outline-offset: -1px; border-color: transparent }
+.ob-model-row { display: flex; align-items: center; gap: .35rem }
+.ob-model-row .ob-input { flex: 1 }
+.ob-test-row { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem }
+.ob-outline { border: 1px solid var(--border); color: var(--text) }
+.ob-ok { display: inline-flex; align-items: center; gap: .3rem; color: var(--d-strong); font-size: .9rem }
+.ob-body .error-text { margin: 0 }
+.ob-features { list-style: none; margin: 0; padding: 0; display: grid; gap: .7rem }
+.ob-features li { display: flex; align-items: flex-start; gap: .7rem; line-height: 1.6; font-size: .94rem }
+.ob-features li > svg { flex: none; box-sizing: content-box; padding: 6px; border-radius: 50%; color: var(--primary); background: color-mix(in srgb, var(--primary) 14%, transparent) }
+.ob-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem 1rem; padding: .9rem 1.5rem 1.1rem; border-top: 1px solid var(--border) }
+.ob-dots { display: flex; gap: .4rem }
+.ob-dots span { width: 8px; height: 8px; border-radius: 99px; background: var(--border); transition: width .2s ease, background .2s ease }
+.ob-dots span.active { width: 22px; background: var(--primary) }
+.ob-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .4rem; margin-left: auto }
+.ob-actions button { white-space: nowrap }
+@media (max-width: 480px) {
+  .ob-body { padding: 1.5rem 1.1rem 1rem }
+  .ob-footer { padding: .9rem 1.1rem 1rem }
+}
 
 /* Mode switch */
 .mode-tabs { display: inline-flex; padding: 3px; border-radius: 10px; background: var(--border); gap: 2px }

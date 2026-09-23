@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { FileUp, Library, Moon, Settings2, Sun, X } from 'lucide-preact'
+import { FileUp, Library, Moon, Settings2, Sparkles, Sun, X } from 'lucide-preact'
 import type { Paper } from './types'
 import { COPY, detectLocale } from './copy'
 import { loadPapers, mutatePapers, patchPaper, subscribePapers } from './lib/store'
@@ -14,6 +14,8 @@ import { PDF_VIEWER_INDEX_KEY } from './lib/pdfViewerLibrary'
 import { progressText } from './components/ProgressView'
 import { useTheme } from './hooks/useTheme'
 import { backdropClose } from './lib/backdrop'
+import { Onboarding } from './components/Onboarding'
+import { markOnboardingDone, shouldShowOnboarding } from './lib/onboarding'
 
 const hashParams = () => new URLSearchParams(location.hash.slice(1))
 const readHash = () => hashParams().get('paper') || ''
@@ -28,6 +30,8 @@ export function App() {
   const [picker, setPicker] = useState(false)
   const [toolbarSlot, setToolbarSlot] = useState<HTMLElement | null>(null)
   const [settings, setSettings] = useState(false)
+  // First-run wizard: shown once on a fresh install, re-openable from settings. Closing it (any path) marks it done.
+  const [onboarding, setOnboarding] = useState(shouldShowOnboarding)
   const [dragging, setDragging] = useState(false)
   const [notice, setNotice] = useState('')
   const [tick, setTick] = useState(0)
@@ -64,6 +68,8 @@ export function App() {
     running.current = true
     void processPaper(next, locale).finally(() => { running.current = false; setTick(n => n + 1) })
   }, [papers, network.config, network.preferences, tick])
+
+  function closeOnboarding() { markOnboardingDone(); setOnboarding(false) }
 
   function select(id: string, nextMode: Mode = 'review') {
     setSelectedId(id); setMode(nextMode)
@@ -169,7 +175,9 @@ export function App() {
       <div class="modal" role="dialog" aria-modal="true" aria-label={t.settings}>
         <div class="modal-head"><h2>{t.aiSettings}</h2><button class="icon" aria-label={t.close} onClick={() => setSettings(false)}><X size={18} /></button></div>
         <AiSettings locale={locale} network={network} />
+        <div class="modal-foot"><button class="ghost" onClick={() => { setSettings(false); setOnboarding(true) }}><Sparkles size={15} />{t.onboarding.reopen}</button></div>
       </div>
     </div>}
+    {onboarding && <Onboarding t={t} locale={locale} onClose={closeOnboarding} />}
   </div>
 }
