@@ -7,6 +7,8 @@ export const STORY_KINDS: StoryKind[] = ['background', 'problem', 'gap', 'claim'
 const MAX_NODES = 40
 const MAX_POINTS = 12
 const MAX_DEPTH = 3
+const MAX_LINKS = 3
+const MAX_REFINE = 2
 
 /** Output languages of understanding mode, independent of the UI language and of the paper's language. */
 export const STUDY_LANGS = {
@@ -54,7 +56,7 @@ function parsePoints(value: unknown, q: string | undefined, depth = 1): StudyPoi
 const questions = (value: unknown) => Array.isArray(value) ? value.map(item => str(item, 300)).filter(Boolean).slice(0, 5) : []
 
 export const STORY_SCHEMA = '{"thesis": string, "nodes": [{"id": string, "kind": string, "label": string, "summary": string, "pages": number[], "points": [{"text": string, "page": number|null, "children": [...]}]}], "edges": [{"from": string, "to": string, "label": string}], "followUps": string[]}'
-export const ANSWER_SCHEMA = '{"nodeId": string|null, "parentId": string|null, "newNode": null|{"kind": string, "label": string, "summary": string, "from": string, "edgeLabel": string}, "points": [{"text": string, "page": number|null, "children": [...]}], "followUps": string[]}'
+export const ANSWER_SCHEMA = '{"nodeId": string|null, "parentId": string|null, "newNode": null|{"kind": string, "label": string, "summary": string, "from": string, "edgeLabel": string}, "links": [{"from": string, "to": string, "label": string}], "refine": [{"id": string, "summary": string}], "points": [{"text": string, "page": number|null, "children": [...]}], "followUps": string[]}'
 
 /**
  * Repeated after the paper: with a long paper in between, models forget the system prompt's format and
@@ -130,6 +132,8 @@ export function askPrompt(lang: StudyLang) {
     'Answer from the paper and cite pages from the [Page N] markers. If the paper does not say, state that, and mark any general background knowledge as such. Build on what the tree already holds; never repeat an existing bullet.',
     'Place the answer: nodeId = the story node it belongs to; parentId = the id (without #) of an existing bullet it elaborates, or null to add top-level bullets under the node.',
     'If the question is about something the graph has no node for (a term, a technique, a related idea), set nodeId to null and give newNode: {"kind": "concept" (or another kind if it is really part of the argument), "label", "summary", "from": the existing node id it hangs off, "edgeLabel"}.',
+    'The graph should grow as the reader understands more. links: 0–3 edges the answer reveals — a relation between two existing nodes the graph lacks, or a sharper label for an existing edge (same from and to; e.g. "motivates" → "shows X fails at scale, motivating"). Use "new" for the newNode. Keep labels short (at most 40 characters).',
+    'refine: 0–2 node summaries the answer makes clearer or corrects — {"id", "summary"} with the full new summary (1–2 sentences, keep what was right). Leave links and refine empty when the answer adds nothing to the story itself.',
     'points: 1–5 concise bullets that each teach one thing (definition, reason, example, number, contrast), with page or null and optional children for detail (at most 2 levels). Prefer intuition first, then specifics.',
     'followUps: 2–4 natural next questions that would deepen the reader\'s understanding from here.',
     'Return a single JSON object, no code fences:',
@@ -164,7 +168,7 @@ function mapPoint(points: StudyPoint[], id: string, update: (p: StudyPoint) => S
  * Adds a parsed answer to the study without mutating it. Unknown node ids fall back to the node the reader
  * was looking at; unknown bullet ids fall back to top level, so a sloppy placement never loses the answer.
  */
-export function applyAnswer(study: Study, raw: string, question: Omit<StudyQuestion, 'id' | 'nodeId'>, focusId?: string): { study: Study; nodeId: string; added: string[] } {
+export function applyAnswer(study: Study, raw: string, question: Omit<StudyQuestion, 'id' | 'nodeId'>, focusId?: string): { study: Study; nodeId: string; added: string[]; changed: { nodes: string[]; edges: string[] } } {
   const obj = unwrap(extractJson(raw), 'points')
   const q = newId()
   let points = parsePoints(obj.points, q)
@@ -172,18 +176,23 @@ export function applyAnswer(study: Study, raw: string, question: Omit<StudyQuest
   let nodes = study.nodes, edges = study.edges
   const known = (id: unknown) => typeof id === 'string' && study.nodes.some(n => n.id === id.trim()) ? id.trim() : undefined
   let nodeId = known(obj.nodeId)
+  let created = ''
   const fresh = obj.newNode && typeof obj.newNode === 'object' ? obj.newNode as Record<string, unknown> : null
   const freshLabel = fresh ? str(fresh.label, 60) : ''
   if (!nodeId && freshLabel && nodes.length < MAX_NODES) {
     const existing = nodes.find(n => n.label === freshLabel)
     nodeId = existing?.id
+    created = existing?.id || ''
     if (!nodeId) {
-      nodeId = 'n' + (Math.max(0, ...nodes.map(n => Number(n.id.slice(1)) || 0)) + 1)
+      created = 'n' + (Math.max(0, ...nodes.map(n => Number(n.id.slice(1)) || 0)) + 1)
+      nodeId = created
       nodes = [...nodes, { id: nodeId, kind: kindOf(fresh!.kind), label: freshLabel, summary: str(fresh!.summary, 600), pages: [...new Set(points.map(p => p.page).filter((p): p is number => p !== null))] }]
       const from = known(fresh!.from) || focusId || study.nodes[0]!.id
       edges = [...edges, { from, to: nodeId, label: str(fresh!.edgeLabel, 40) }]
     }
   }
+  const graph = refineGraph(nodes, edges, obj, created, nodes.length > study.nodes.length ? created : '')
+  nodes = graph.nodes; edges = graph.edges
   nodeId ||= focusId && study.nodes.some(n => n.id === focusId) ? focusId : study.nodes[0]!.id
   const current = study.tree[nodeId] || []
   const parentId = typeof obj.parentId === 'string' ? obj.parentId.replace(/^#/, '').trim() : ''
@@ -198,8 +207,42 @@ export function applyAnswer(study: Study, raw: string, question: Omit<StudyQuest
   const record: StudyQuestion = { ...question, id: q, nodeId }
   return {
     study: { ...study, nodes, edges, tree: { ...study.tree, [nodeId]: branch }, questions: [...study.questions, record], followUps: questions(obj.followUps).length ? questions(obj.followUps) : study.followUps },
-    nodeId, added: points.map(p => p.id),
+    nodeId, added: points.map(p => p.id), changed: graph.changed,
   }
+}
+
+/**
+ * The story-level part of an answer: new or relabelled edges and sharper node summaries. Anything that does
+ * not point at a known node is dropped, so a sloppy reply can only leave the graph as it was.
+ */
+function refineGraph(nodes: StoryNode[], edges: StoryEdge[], obj: Record<string, unknown>, created: string, added: string) {
+  const changed = { nodes: [] as string[], edges: [] as string[] }
+  const idOf = (value: unknown) => {
+    const id = str(value, 60).replace(/^\[|\]$/g, '')
+    if (id === 'new') return created || undefined
+    return nodes.some(n => n.id === id) ? id : undefined
+  }
+  for (const item of (Array.isArray(obj.links) ? obj.links : []).slice(0, MAX_LINKS)) {
+    if (!item || typeof item !== 'object') continue
+    const e = item as Record<string, unknown>
+    const from = idOf(e.from), to = idOf(e.to), label = str(e.label, 40)
+    if (!from || !to || from === to) continue
+    const at = edges.findIndex(x => x.from === from && x.to === to)
+    if (at < 0) edges = [...edges, { from, to, label }]
+    else if (label && label !== edges[at]!.label) edges = edges.map((x, i) => i === at ? { ...x, label } : x)
+    else continue
+    changed.edges.push(from + '>' + to)
+  }
+  for (const item of (Array.isArray(obj.refine) ? obj.refine : []).slice(0, MAX_REFINE)) {
+    if (!item || typeof item !== 'object') continue
+    const r = item as Record<string, unknown>
+    const id = idOf(r.id), summary = str(r.summary, 600)
+    // A node this answer just added already has a fresh summary.
+    if (!id || !summary || id === added) continue
+    nodes = nodes.map(n => n.id === id ? { ...n, summary } : n)
+    changed.nodes.push(id)
+  }
+  return { nodes, edges, changed }
 }
 
 // --- Translation of an existing study ---------------------------------------

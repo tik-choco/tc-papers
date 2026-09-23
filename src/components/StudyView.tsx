@@ -38,6 +38,8 @@ function Points({ points, fresh, questions, t, onPage }: { points: StudyPoint[];
   </ul>
 }
 
+const noneFresh = () => ({ nodes: new Set<string>(), edges: new Set<string>(), points: new Set<string>() })
+
 export function StudyView({ paper, t, locale, toolbarSlot, onBack, onMode }: { paper: Paper; t: CopyText; locale: Locale; toolbarSlot?: HTMLElement | null; onBack: () => void; onMode: (mode: Mode) => void }) {
   const study = paper.study
   const [selected, setSelected] = useState(study?.nodes[0]?.id || '')
@@ -45,7 +47,7 @@ export function StudyView({ paper, t, locale, toolbarSlot, onBack, onMode }: { p
   const [error, setError] = useState('')
   const [question, setQuestion] = useState('')
   const [selection, setSelection] = useState<PdfSelection | null>(null)
-  const [fresh, setFresh] = useState<{ node: string; points: Set<string> }>({ node: '', points: new Set() })
+  const [fresh, setFresh] = useState(noneFresh)
   const [target, setTarget] = useState<PdfTarget | null>(null)
   const [layout, setLayout] = useState(loadLayout)
   const [confirming, setConfirming] = useState(false)
@@ -110,7 +112,7 @@ export function StudyView({ paper, t, locale, toolbarSlot, onBack, onMode }: { p
     const text = await paperText()
     const next = await chatJson('study', [{ role: 'system', content: storyPrompt(lang) }, { role: 'user', content: 'Paper text:\n' + text + '\n\n' + storyReminder(lang) }], STORY_SCHEMA, parseStory, onText)
     patchPaper(paper.id, { study: { ...next, lang } })
-    setSelected(next.nodes[0]!.id); setFresh({ node: '', points: new Set() }); setConfirming(false)
+    setSelected(next.nodes[0]!.id); setFresh(noneFresh()); setConfirming(false)
   })
 
   const ask = (preset?: string) => run(false, async onText => {
@@ -130,7 +132,10 @@ export function StudyView({ paper, t, locale, toolbarSlot, onBack, onMode }: { p
     const latest = loadPapers().find(p => p.id === paper.id)?.study || current
     const result = applyAnswer(latest, raw, record(model), focus?.id)
     patchPaper(paper.id, { study: result.study })
-    setSelected(result.nodeId); setFresh({ node: result.study.nodes.length > latest.nodes.length ? result.nodeId : '', points: new Set(result.added) })
+    setSelected(result.nodeId); // Highlights what the answer changed in the graph: a new node, new or relabelled edges, refined summaries.
+    const nodes = new Set(result.changed.nodes)
+    if (result.study.nodes.length > latest.nodes.length) nodes.add(result.nodeId)
+    setFresh({ nodes, edges: new Set(result.changed.edges), points: new Set(result.added) })
     setQuestion(''); setSelection(null)
   })
 
@@ -174,7 +179,7 @@ export function StudyView({ paper, t, locale, toolbarSlot, onBack, onMode }: { p
         {busy && <p class="muted small">{t.study.thinking(busy.chars)}</p>}
       </section> : <div class="graph-panel" ref={graphRef}>
         {study.thesis && <p class="thesis"><strong>{t.study.thesis}</strong>{study.thesis}</p>}
-        <StoryGraph nodes={study.nodes} edges={study.edges} selected={selected} fresh={fresh.node} kinds={t.study.kinds} onSelect={setSelected} />
+        <StoryGraph nodes={study.nodes} edges={study.edges} selected={selected} fresh={fresh} kinds={t.study.kinds} onSelect={setSelected} />
       </div>,
     },
     focus: {

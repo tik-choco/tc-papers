@@ -59,6 +59,23 @@ describe('applyAnswer', () => {
     expect(next.edges.at(-1)).toEqual({ from: 'n2', to: 'n5', label: 'uses' })
     expect(next.followUps).toEqual(study.followUps)
   })
+  it('adds and relabels edges and refines summaries the answer sheds light on', () => {
+    const raw = JSON.stringify({
+      nodeId: null, newNode: { kind: 'concept', label: 'Hash collisions', summary: 'Different tokens in one bucket.', from: 'n2', edgeLabel: 'relies on' },
+      links: [{ from: 'n1', to: 'n3', label: 'quantified by' }, { from: 'n2', to: 'n3', label: 'cuts memory, shown by' }, { from: 'new', to: 'n4', label: 'explains' }, { from: 'ghost', to: 'n1', label: 'x' }],
+      refine: [{ id: 'n2', summary: 'Hash similar tokens into buckets and attend only within them.' }, { id: 'new', summary: 'ignored' }],
+      points: [{ text: 'Buckets are approximate', page: 2 }],
+    })
+    const { study: next, changed } = applyAnswer(study, raw, q)
+    expect(next.edges.find(e => e.from === 'n1' && e.to === 'n3')?.label).toBe('quantified by')
+    expect(next.edges.find(e => e.from === 'n2' && e.to === 'n3')?.label).toBe('cuts memory, shown by')
+    expect(next.edges.find(e => e.from === 'n5' && e.to === 'n4')?.label).toBe('explains')
+    expect(next.edges).toHaveLength(study.edges.length + 3)
+    expect(next.nodes[1]!.summary).toBe('Hash similar tokens into buckets and attend only within them.')
+    expect(next.nodes.at(-1)!.summary).toBe('Different tokens in one bucket.')
+    expect(changed).toEqual({ nodes: ['n2'], edges: ['n1>n3', 'n2>n3', 'n5>n4'] })
+    expect(study.nodes[1]!.summary).toBe('Hash similar tokens together.') // not mutated
+  })
   it('falls back to the focused node and top level on bad placement', () => {
     const raw = JSON.stringify({ nodeId: 'zzz', parentId: 'missing', points: [{ text: 'Answer' }] })
     const { study: next, nodeId } = applyAnswer(study, raw, q, 'n3')

@@ -24,7 +24,7 @@ export function scrollWithin(container: HTMLElement, el: HTMLElement, align: 'st
 
 /** Nodes are HTML buttons over an SVG edge layer: text wraps naturally and every node is keyboard reachable. */
 export function StoryGraph({ nodes, edges, selected, fresh, kinds, onSelect }: {
-  nodes: StoryNode[]; edges: StoryEdge[]; selected: string; fresh: string; kinds: Record<StoryKind, string>; onSelect: (id: string) => void
+  nodes: StoryNode[]; edges: StoryEdge[]; selected: string; fresh: { nodes: Set<string>; edges: Set<string> }; kinds: Record<StoryKind, string>; onSelect: (id: string) => void
 }) {
   const layout = useMemo(() => layoutStory(nodes, edges), [nodes, edges])
   const scroller = useRef<HTMLDivElement>(null)
@@ -59,14 +59,14 @@ export function StoryGraph({ nodes, edges, selected, fresh, kinds, onSelect }: {
             d = `M${x1} ${y1} C${x1} ${y1 + bend} ${x2} ${y2 - bend} ${x2} ${y2}`
             lx = (x1 + x2) / 2; ly = y2 - GAP_Y / 2
           }
-          return <g key={edge.from + edge.to} class={`edge ${related ? 'related' : ''} ${layout.back.has(edge) ? 'back' : ''}`}>
+          return <g key={edge.from + edge.to} class={`edge ${related ? 'related' : ''} ${layout.back.has(edge) ? 'back' : ''} ${fresh.edges.has(edge.from + '>' + edge.to) ? 'fresh' : ''}`}>
             <path d={d} marker-end="url(#arrow)" />
             {edge.label && <text x={lx} y={ly} text-anchor="middle" dominant-baseline="middle">{edge.label}</text>}
           </g>
         })}
       </svg>
       {layout.nodes.map(({ node, x, y }) => <button key={node.id} type="button"
-        class={`story-node k-${node.kind} ${node.id === selected ? 'selected' : ''} ${node.id === fresh ? 'fresh' : ''}`}
+        class={`story-node k-${node.kind} ${node.id === selected ? 'selected' : ''} ${fresh.nodes.has(node.id) ? 'fresh' : ''}`}
         style={{ left: x + PAD + 'px', top: y + PAD + 'px', width: NODE_W + 'px', height: NODE_H + 'px' }}
         aria-pressed={node.id === selected} title={node.summary} onClick={() => onSelect(node.id)}>
         <small>{kinds[node.kind]}</small>
