@@ -142,3 +142,49 @@ test('waits for an AI connection instead of failing', async ({ page }) => {
   await drop(page, [{ name: 'sparse.pdf', buffer: pdfFixture() }])
   await expect(page.getByRole('alert')).toContainText('No AI connection')
 })
+
+test('retry resumes from the failed step instead of rescanning finished pages', async ({ page }) => {
+  await configureAi(page)
+  const ocrPages: number[] = []
+  let reviews = 0
+  await page.route(API + '/chat/completions', async route => {
+    const content = route.request().postDataJSON().messages[0].content
+    if (Array.isArray(content)) {
+      const n = Number(/page (\d+) of a PDF/.exec(content[0].text)![1])
+      ocrPages.push(n)
+      // Page 3's OCR fails the first time only.
+      if (n === 3 && ocrPages.filter(p => p === 3).length === 1) return route.fulfill({ status: 500, body: 'fail' })
+      return route.fulfill({ json: { choices: [{ message: { content: 'Scanned page ' + n + ' with enough visible characters to count as text.' } }] } })
+    }
+    // The first review fails, as if the connection dropped.
+    if (++reviews === 1) return route.fulfill({ status: 500, body: 'fail' })
+    await route.fulfill({ json: { choices: [{ message: { content: reviewJson('reduces memory by 43% on long documents') } }] } })
+  })
+  await page.goto('/')
+  await drop(page, [{ name: 'mixed.pdf', buffer: pdfFixture('Mixed', [BODY, [], []]) }])
+  await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible({ timeout: 30_000 })
+  expect(ocrPages).toEqual([2, 3])
+  await page.getByRole('button', { name: 'Retry' }).click()
+  await expect(page.locator('.verdict .score-badge')).toHaveText(/\d+/, { timeout: 30_000 })
+  // Only the page whose OCR failed is sent again; page 2 comes from the checkpoint.
+  expect(ocrPages).toEqual([2, 3, 3])
+  expect(reviews).toBe(2)
+  await expect(page.locator('.review .muted').first()).toContainText('OCR 2')
+})
+
+test('retry after a review failure does not scan again', async ({ page }) => {
+  await configureAi(page)
+  let ocrCalls = 0, reviews = 0
+  await page.route(API + '/chat/completions', async route => {
+    const content = route.request().postDataJSON().messages[0].content
+    if (Array.isArray(content)) { ocrCalls++; return route.fulfill({ json: { choices: [{ message: { content: BODY.join('\n') } }] } }) }
+    if (++reviews === 1) return route.fulfill({ status: 500, body: 'fail' })
+    await route.fulfill({ json: { choices: [{ message: { content: reviewJson('replaces dense attention with locality-sensitive hashing buckets') } }] } })
+  })
+  await page.goto('/')
+  await drop(page, [{ name: 'scan.pdf', buffer: pdfFixture('Scanned', [[]]) }])
+  await page.getByRole('button', { name: 'Retry' }).click({ timeout: 30_000 })
+  await expect(page.locator('.verdict .score-badge')).toHaveText(/\d+/, { timeout: 30_000 })
+  expect(ocrCalls).toBe(1)
+  expect(reviews).toBe(2)
+})

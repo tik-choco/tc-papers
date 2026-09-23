@@ -84,8 +84,9 @@ export function App() {
   }
 
   async function rerun(paper: Paper) {
-    // Errors rescan from scratch (e.g. an OCR model was added); otherwise keep the cached scan.
-    if (paper.state === 'error') {
+    // Retry resumes where it failed: a finished scan is kept and only the review runs again.
+    // Pages whose OCR failed are rescanned; the others come from the scan checkpoint.
+    if (paper.state === 'error' && paper.scan?.ocrFailed) {
       const stored = await getPdf(paper.id).catch(() => undefined)
       if (stored) await storePdf({ ...stored, text: '' })
       patchPaper(paper.id, { state: 'queued', error: undefined, scan: undefined })

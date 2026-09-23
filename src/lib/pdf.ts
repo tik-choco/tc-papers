@@ -1,6 +1,10 @@
 import type { ScanInfo } from '../types'
 
 export interface StoredPdf { id: string; blob: Blob; text: string }
+/** One finished page of a scan. */
+export interface ScanPage { text: string; ocr: boolean }
+/** Pages finished so far, by index (page - 1). Holes are pages still to do (e.g. OCR failed or unavailable). */
+export interface ScanCheckpoint { id: string; pages: (ScanPage | null)[] }
 export const MAX_PDF_SIZE = 50 * 1024 * 1024
 export const MAX_PAGES = 40
 export const MAX_CHARS = 120_000
@@ -9,25 +13,36 @@ export const MIN_PAGE_CHARS = 40
 
 async function database(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('tc-papers:pdfs-v1', 1)
-    request.onupgradeneeded = () => request.result.createObjectStore('pdfs', { keyPath: 'id' })
+    const request = indexedDB.open('tc-papers:pdfs-v1', 2)
+    request.onupgradeneeded = () => {
+      const db = request.result
+      if (!db.objectStoreNames.contains('pdfs')) db.createObjectStore('pdfs', { keyPath: 'id' })
+      // Kept apart from the PDF blob so saving a page never rewrites the file.
+      if (!db.objectStoreNames.contains('scans')) db.createObjectStore('scans', { keyPath: 'id' })
+    }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(new Error('PDF_STORAGE'))
   })
 }
-async function transaction<T>(mode: IDBTransactionMode, action: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+async function transaction<T>(mode: IDBTransactionMode, action: (store: IDBObjectStore) => IDBRequest<T>, name: 'pdfs' | 'scans' = 'pdfs'): Promise<T> {
   let db: IDBDatabase
   try { db = await database() } catch { throw new Error('PDF_STORAGE') }
   return new Promise((resolve, reject) => {
-    const tx = db.transaction('pdfs', mode)
-    const request = action(tx.objectStore('pdfs'))
+    const tx = db.transaction(name, mode)
+    const request = action(tx.objectStore(name))
     tx.oncomplete = () => { db.close(); resolve(request.result) }
     tx.onerror = tx.onabort = () => { db.close(); reject(new Error('PDF_STORAGE')) }
   })
 }
 export async function storePdf(pdf: StoredPdf): Promise<void> { await transaction('readwrite', store => store.put(pdf)) }
 export function getPdf(id: string): Promise<StoredPdf | undefined> { return transaction('readonly', store => store.get(id)) }
-export async function deletePdf(id: string): Promise<void> { await transaction('readwrite', store => store.delete(id)) }
+export async function deletePdf(id: string): Promise<void> {
+  await transaction('readwrite', store => store.delete(id))
+  await deleteScanCheckpoint(id)
+}
+export function getScanCheckpoint(id: string): Promise<ScanCheckpoint | undefined> { return transaction('readonly', store => store.get(id), 'scans') }
+export async function saveScanCheckpoint(checkpoint: ScanCheckpoint): Promise<void> { await transaction('readwrite', store => store.put(checkpoint), 'scans') }
+export async function deleteScanCheckpoint(id: string): Promise<void> { await transaction('readwrite', store => store.delete(id), 'scans') }
 
 /** Validates and hashes a dropped file. Parsing happens later in scanPdf. */
 export async function acceptPdf(file: File): Promise<StoredPdf> {
@@ -52,13 +67,17 @@ export interface ScanOptions {
   /** OCR one rendered page (JPEG data URL). Omit when no OCR model is available. */
   ocr?: (dataUrl: string, page: number) => Promise<string>
   onProgress?: (done: number, total: number, ocr: boolean) => void
+  /** Pages finished by an earlier, interrupted scan; these are reused instead of read again. */
+  done?: readonly (ScanPage | null)[]
+  /** Called once a page is final (text layer found or OCR succeeded), before the next page starts. */
+  onPage?: (page: number, result: ScanPage) => void | Promise<void>
 }
 
 /**
  * Text layer first; pages without one are rendered and OCR'd (same approach as tc-pdf-viewer,
  * but only for pages that need it). Output uses [Page N] markers so evidence can cite pages.
  */
-export async function scanPdf(blob: Blob, { ocr, onProgress }: ScanOptions = {}): Promise<{ text: string; title: string; scan: ScanInfo }> {
+export async function scanPdf(blob: Blob, { ocr, onProgress, done = [], onPage }: ScanOptions = {}): Promise<{ text: string; title: string; scan: ScanInfo }> {
   const task = await openDocument(blob)
   try {
     const doc = await task.promise.catch(() => { throw new Error('PDF_READ_FAILED') })
@@ -69,10 +88,20 @@ export async function scanPdf(blob: Blob, { ocr, onProgress }: ScanOptions = {})
     const total = Math.min(doc.numPages, MAX_PAGES)
     let text = '', ocrPages = 0, ocrFailed = 0, scannedPages = 0
     for (let n = 1; n <= total && text.length < MAX_CHARS; n++) {
+      const saved = done[n - 1]
+      if (saved) {
+        if (saved.ocr) ocrPages++
+        text += '\n[Page ' + n + ']\n' + saved.text
+        scannedPages = n
+        onProgress?.(n, total, false)
+        continue
+      }
       const page = await doc.getPage(n)
       const content = await page.getTextContent()
       let pageText = content.items.map(item => 'str' in item ? item.str + (item.hasEOL ? '\n' : ' ') : '').join('')
-      if (pageText.replace(/\s/g, '').length < MIN_PAGE_CHARS && ocr) {
+      const needsOcr = pageText.replace(/\s/g, '').length < MIN_PAGE_CHARS
+      let final = !needsOcr
+      if (needsOcr && ocr) {
         onProgress?.(n - 1, total, true)
         const viewport = page.getViewport({ scale: 2 })
         const canvas = document.createElement('canvas')
@@ -80,11 +109,13 @@ export async function scanPdf(blob: Blob, { ocr, onProgress }: ScanOptions = {})
         const context = canvas.getContext('2d', { alpha: false })!
         context.fillStyle = '#fff'; context.fillRect(0, 0, canvas.width, canvas.height)
         await page.render({ canvas, canvasContext: context, viewport }).promise
-        try { pageText = await ocr(canvas.toDataURL('image/jpeg', 0.85), n); ocrPages++ }
+        try { pageText = await ocr(canvas.toDataURL('image/jpeg', 0.85), n); ocrPages++; final = true }
         catch { if (++ocrFailed >= 2 && !ocrPages) ocr = undefined } // e.g. a text-only model: stop retrying
         canvas.width = canvas.height = 0
       }
       page.cleanup()
+      // Pages still waiting for OCR are left out so a later scan retries only them.
+      if (final) await onPage?.(n, { text: pageText, ocr: needsOcr })
       text += '\n[Page ' + n + ']\n' + pageText
       scannedPages = n
       onProgress?.(n, total, false)

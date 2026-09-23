@@ -1,7 +1,7 @@
 import type { Paper, Progress } from '../types'
 import type { Locale } from '../copy'
 import { aiConfigured, ocrPage, reviewPaper } from './ai'
-import { getPdf, storePdf, scanPdf } from './pdf'
+import { deleteScanCheckpoint, getPdf, getScanCheckpoint, saveScanCheckpoint, scanPdf, storePdf } from './pdf'
 import { loadPapers, patchPaper } from './store'
 import { scoreReview } from './score'
 
@@ -31,12 +31,18 @@ export async function processPaper(paper: Paper, locale: Locale): Promise<void> 
     if (!text || !scan) {
       const canOcr = aiConfigured('ocr')
       patchPaper(id, { state: 'scanning', progress: { step: 'scan', startedAt }, error: undefined })
+      // Resume an interrupted or partly failed scan: finished pages are saved one by one and not read or OCR'd again.
+      const pages = (await getScanCheckpoint(id).catch(() => undefined))?.pages || []
       const result = await scanPdf(stored.blob, {
         ocr: canOcr ? ocrPage : undefined,
         onProgress: (done, total, ocr) => progress(ocr ? { step: 'ocr', done: done + 1, total } : { step: 'scan', done, total }),
+        done: pages,
+        onPage: async (n, page) => { pages[n - 1] = page; await saveScanCheckpoint({ id, pages }).catch(() => {}) },
       })
       text = result.text; scan = result.scan; title = result.title || title
       await storePdf({ ...stored, text })
+      // Every page is final, so the stored text is all a later run needs.
+      if (Array.from({ length: result.scan.scannedPages }, (_, i) => pages[i]).every(Boolean)) await deleteScanCheckpoint(id).catch(() => {})
       patchPaper(id, { scan: result.scan, ...(result.title ? { title: result.title } : {}) })
       if (text.replace(/\[Page \d+\]|\s/g, '').length < MIN_REVIEW_CHARS) {
         // Image-only PDF: rescan once an OCR model is available.
