@@ -15,6 +15,7 @@ import type { Paper } from '../types'
 const mocks = vi.hoisted(() => ({ publishShared: vi.fn(), storage_add: vi.fn(async () => 'cid-1') }))
 vi.mock('./sharedBus', () => ({ publishShared: mocks.publishShared }))
 vi.mock('../vendor/mistlib/index.js', () => ({ storage_add: mocks.storage_add }))
+vi.mock('./mist', () => ({ ensureMistStorage: async () => {} }))
 
 const { startPapersBackupPublisher } = await import('./papersBackupPublisher')
 

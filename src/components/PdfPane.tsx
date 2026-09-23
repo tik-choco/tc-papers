@@ -81,9 +81,15 @@ export function PdfPane({ paperId, target, onSelect, t }: { paperId: string; tar
   useEffect(() => {
     const el = scroller.current
     if (!el) return
-    const observer = new ResizeObserver(() => setWidth(el.clientWidth - 24))
+    // Debounced: while a panel is being resized, pages re-render once it settles rather than on every frame.
+    let timer: ReturnType<typeof setTimeout> | undefined, first = true
+    const observer = new ResizeObserver(() => {
+      clearTimeout(timer)
+      timer = setTimeout(() => setWidth(el.clientWidth - 24), first ? 0 : 150)
+      first = false
+    })
     observer.observe(el)
-    return () => observer.disconnect()
+    return () => { observer.disconnect(); clearTimeout(timer) }
   }, [doc])
 
   useEffect(() => {
@@ -110,7 +116,7 @@ export function PdfPane({ paperId, target, onSelect, t }: { paperId: string; tar
   }
 
   const scale = width > 0 && base ? width / base.w * ZOOMS[zoom]! : 0
-  return <section class="pdf-pane" aria-label="PDF">
+  return <div class="pdf-pane">
     <div class="pdf-bar">
       <span class="muted small">{doc ? `p. ${current} / ${doc.numPages}` : ''}</span>
       <span class="muted small pdf-hint">{t.study.selectHint}</span>
@@ -124,5 +130,5 @@ export function PdfPane({ paperId, target, onSelect, t }: { paperId: string; tar
         : !doc || !base ? <p class="muted pdf-empty"><span class="spinner" /></p>
         : Array.from({ length: doc.numPages }, (_, i) => <PageView key={i} doc={doc} n={i + 1} scale={scale} base={base} />)}
     </div>
-  </section>
+  </div>
 }

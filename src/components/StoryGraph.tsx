@@ -1,18 +1,42 @@
-import { useMemo } from 'preact/hooks'
+import { useEffect, useMemo, useRef } from 'preact/hooks'
 import type { StoryEdge, StoryKind, StoryNode } from '../types'
 import { GAP_Y, NODE_H, NODE_W, layoutStory } from '../lib/study'
 
 const PAD = 16
+
+/**
+ * Scrolls `container` (only it — unlike scrollIntoView, never the page) so `el` is visible. A container that
+ * does not scroll is left alone, which is what keeps narrow screens from jumping around.
+ */
+export function scrollWithin(container: HTMLElement, el: HTMLElement, align: 'start' | 'nearest') {
+  const c = container.getBoundingClientRect(), r = el.getBoundingClientRect()
+  let top = container.scrollTop, left = container.scrollLeft
+  if (container.scrollHeight > container.clientHeight) {
+    if (align === 'start' || r.top < c.top) top += r.top - c.top - 8
+    else if (r.bottom > c.bottom) top += Math.min(r.bottom - c.bottom + 8, r.top - c.top - 8)
+  }
+  if (container.scrollWidth > container.clientWidth) {
+    if (r.left < c.left) left += r.left - c.left - 8
+    else if (r.right > c.right) left += r.right - c.right + 8
+  }
+  if (top !== container.scrollTop || left !== container.scrollLeft) container.scrollTo({ top, left, behavior: 'smooth' })
+}
 
 /** Nodes are HTML buttons over an SVG edge layer: text wraps naturally and every node is keyboard reachable. */
 export function StoryGraph({ nodes, edges, selected, fresh, kinds, onSelect }: {
   nodes: StoryNode[]; edges: StoryEdge[]; selected: string; fresh: string; kinds: Record<StoryKind, string>; onSelect: (id: string) => void
 }) {
   const layout = useMemo(() => layoutStory(nodes, edges), [nodes, edges])
+  const scroller = useRef<HTMLDivElement>(null)
+  // Picking a node from the tree brings it into view inside the graph panel.
+  useEffect(() => {
+    const el = scroller.current?.querySelector<HTMLElement>('.story-node.selected')
+    if (el) scrollWithin(scroller.current!, el, 'nearest')
+  }, [selected, layout])
   const at = new Map(layout.nodes.map(n => [n.node.id, n]))
   // Back edges bulge out to the right of the widest row.
   const width = layout.width + PAD * 2 + (layout.back.size ? 48 : 0), height = layout.height + PAD * 2
-  return <div class="graph-scroll">
+  return <div class="graph-scroll" ref={scroller}>
     <div class="graph" style={{ width: width + 'px', height: height + 'px' }}>
       <svg width={width} height={height} aria-hidden="true">
         <defs>

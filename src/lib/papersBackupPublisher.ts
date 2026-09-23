@@ -40,6 +40,7 @@
 import { loadPapers, subscribePapers } from "./store";
 import { publishShared } from "./sharedBus";
 import { storage_add } from "../vendor/mistlib/index.js";
+import { ensureMistStorage } from "./mist";
 import type { Paper } from "../types";
 
 const TOPIC = "papers-backup";
@@ -174,6 +175,8 @@ async function publishBundleUnsafe(): Promise<void> {
     await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv as BufferSource }, cryptoKey, plaintext as BufferSource),
   );
 
+  // The CID store is unusable until the page's MistNode (and the wasm module) is initialized.
+  await ensureMistStorage();
   const cid = await storage_add(SHARED_STORAGE_NAME, cipherText);
 
   const updatedAt = new Date().toISOString();

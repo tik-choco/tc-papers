@@ -136,6 +136,25 @@ test('an unparseable review is sent back once to be fixed instead of failing', a
   expect(systems[1]).toContain('"criteria": {"<criterion id>"')
 })
 
+test('reviews are backed up to tc-storage through the real mistlib CID store', async ({ page }) => {
+  await configureAi(page)
+  const warnings: string[] = []
+  page.on('console', message => { if (message.type() === 'warning' && message.text().includes('papersBackupPublisher')) warnings.push(message.text()) })
+  await page.route(API + '/chat/completions', route => route.fulfill({ json: { choices: [{ message: { content: reviewJson('reduces memory by 43% on long documents') } }] } }))
+  await page.goto('/')
+  await drop(page, [{ name: 'sparse.pdf', buffer: pdfFixture() }])
+  await expect(page.locator('.verdict .score-badge')).toHaveText('76', { timeout: 20_000 })
+  // Published after the startup delay / debounce: a shared record whose CID resolves in the store.
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('tc-shared-papers-backup-v1')), { timeout: 15_000 }).toContain('"cid"')
+  const size = await page.evaluate(async () => {
+    const record = JSON.parse(localStorage.getItem('tc-shared-papers-backup-v1')!)
+    const lib = await import('/src/vendor/mistlib/index.js')
+    return (await lib.storage_get(record.meta.item.cid)).byteLength
+  })
+  expect(size).toBeGreaterThan(100)
+  expect(warnings).toEqual([])
+})
+
 test('image-only pages are rendered and sent to the OCR model', async ({ page }) => {
   await configureAi(page)
   let ocrCalls = 0

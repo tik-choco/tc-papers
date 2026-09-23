@@ -59,6 +59,16 @@ test('understanding mode maps the story and grows the tree with every question',
   await expect(page.locator('.edge')).toHaveCount(3)
   await expect(page.locator('.thesis')).toContainText('Hashing tokens')
 
+  // Every panel fits on one screen: the page never scrolls, and choosing a node only moves the tree panel.
+  expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight)).toBe(true)
+  for (const name of ['PDF', 'Story', 'Selected node', 'Ask']) await expect(page.getByRole('region', { name, exact: true })).toBeInViewport()
+  await page.locator('.story-node', { hasText: 'LSH buckets' }).click()
+  await expect(page.locator('.focus')).toContainText('Similar tokens share a bucket.')
+  await expect(page.locator('.focus-points')).toContainText('Replaces dense attention')
+  await expect(page.locator('.tree li.current')).toContainText('LSH buckets')
+  expect(await page.evaluate(() => scrollY)).toBe(0)
+  await expect(page.locator('.to-graph')).toBeHidden()
+
   // A question nests its answer under the bullet the model points at.
   await page.locator('.story-node', { hasText: 'LSH buckets' }).click()
   await page.getByRole('textbox', { name: 'Ask' }).fill('How does hashing help?')
@@ -89,8 +99,72 @@ test('understanding mode maps the story and grows the tree with every question',
   await expect(page.locator('.tree .q-badge')).toHaveCount(2)
   await page.setViewportSize({ width: 390, height: 844 })
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  // On a phone the page scrolls as a whole, so a node click must not move it; its bullets show under the graph.
+  await page.locator('.story-node', { hasText: 'LSH buckets' }).scrollIntoViewIfNeeded()
+  const mobileScroll = await page.evaluate(() => scrollY)
+  await page.locator('.story-node', { hasText: 'LSH buckets' }).click()
+  await expect(page.locator('.focus-points')).toContainText('Tokens are hashed so neighbours collide')
+  await page.waitForTimeout(400) // any smooth scroll would have started by now
+  expect(await page.evaluate(() => scrollY)).toBe(mobileScroll)
   await page.screenshot({ path: '.test-output/study-mobile.png', fullPage: true })
   expect(errors).toEqual([])
+})
+
+test('panels can be dragged, split, resized, hidden and are remembered', async ({ page }) => {
+  await setup(page)
+  await page.goto('/')
+  await page.locator('input[type=file]').setInputFiles({ name: 'sparse.pdf', mimeType: 'application/pdf', buffer: pdfFixture() })
+  await expect(page.locator('.verdict .score-badge')).toHaveText(/\d+/, { timeout: 20_000 })
+  await page.getByRole('tab', { name: 'Understand' }).click()
+  await page.getByRole('button', { name: 'Map the story' }).click()
+  await expect(page.locator('.story-node')).toHaveCount(4, { timeout: 20_000 })
+
+  const columns = () => page.locator('.ws-col').evaluateAll(cols => cols.map(col => [...col.querySelectorAll('[data-panel]')].map(p => (p as HTMLElement).dataset.panel)))
+  expect(await columns()).toEqual([['pdf'], ['graph', 'focus'], ['tree', 'ask']])
+  const head = (id: string) => page.locator(`[data-panel="${id}"] .panel-head h2`)
+  async function dragTo(id: string, target: string, fx: number, fy: number) {
+    const from = (await head(id).boundingBox())!, box = (await page.locator(`[data-panel="${target}"]`).boundingBox())!
+    await page.mouse.move(from.x + 20, from.y + from.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width * fx, box.y + box.height * fy, { steps: 8 })
+    await expect(page.locator('.drop-preview')).toBeVisible()
+    await page.mouse.up()
+  }
+
+  // Upper half of another panel: stack above it.
+  await dragTo('ask', 'graph', 0.5, 0.3)
+  expect(await columns()).toEqual([['pdf'], ['ask', 'graph', 'focus'], ['tree']])
+  // Right edge: split into a new column.
+  await dragTo('focus', 'tree', 0.95, 0.5)
+  expect(await columns()).toEqual([['pdf'], ['ask', 'graph'], ['tree'], ['focus']])
+  await expect(page.locator('.drop-preview')).toHaveCount(0)
+
+  // Dragging the gap between the first two columns resizes them.
+  const pdfWidth = async () => (await page.locator('[data-panel="pdf"]').boundingBox())!.width
+  const before = await pdfWidth()
+  const gap = (await page.locator('.gap-x').first().boundingBox())!
+  await page.mouse.move(gap.x + gap.width / 2, gap.y + gap.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(gap.x + gap.width / 2 - 120, gap.y + gap.height / 2, { steps: 6 })
+  await page.mouse.up()
+  expect(Math.abs(await pdfWidth() - (before - 120))).toBeLessThan(3)
+
+  // Collapse, hide and bring back.
+  await page.locator('[data-panel="tree"]').getByRole('button', { name: 'Collapse' }).click()
+  await expect(page.locator('[data-panel="tree"] .panel-body')).toHaveCount(0)
+  await page.locator('[data-panel="pdf"]').getByRole('button', { name: 'Hide panel' }).click()
+  await expect(page.locator('[data-panel="pdf"]')).toHaveCount(0)
+  // A page reference brings the hidden PDF back.
+  await page.locator('.focus .page-ref').first().click()
+  await expect(page.locator('[data-panel="pdf"] .pdf-page canvas').first()).toBeVisible({ timeout: 20_000 })
+
+  // The arrangement survives a reload; reset restores the default.
+  await page.reload()
+  expect(await columns()).toEqual([['pdf'], ['ask', 'graph'], ['tree'], ['focus']])
+  await expect(page.locator('[data-panel="tree"] .panel-body')).toHaveCount(0)
+  await page.screenshot({ path: '.test-output/study-layout.png' })
+  await page.getByRole('button', { name: 'Reset layout' }).click()
+  expect(await columns()).toEqual([['pdf'], ['graph', 'focus'], ['tree', 'ask']])
 })
 
 test('a reply in its own schema is converted to the story graph instead of failing', async ({ page }) => {

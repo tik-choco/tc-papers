@@ -25,6 +25,7 @@ export function App() {
   const [selectedId, setSelectedId] = useState(readHash)
   const [mode, setMode] = useState(readMode)
   const [picker, setPicker] = useState(false)
+  const [toolbarSlot, setToolbarSlot] = useState<HTMLElement | null>(null)
   const [settings, setSettings] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [notice, setNotice] = useState('')
@@ -116,21 +117,24 @@ export function App() {
   }
 
   const selected = papers.find(p => p.id === selectedId)
+  const studying = Boolean(selected) && mode === 'study'
 
-  return <div class={`shell ${dragging ? 'dragging' : ''}`}
+  return <div class={`shell ${dragging ? 'dragging' : ''} ${studying ? 'full' : ''}`}
     onDragOver={e => { e.preventDefault(); setDragging(true) }}
     onDragLeave={e => { if (!e.relatedTarget) setDragging(false) }}
     onDrop={e => { e.preventDefault(); setDragging(false); if (e.dataTransfer?.files.length) void addFiles(Array.from(e.dataTransfer.files)) }}>
     <header class="topbar">
       <a class="brand" href="#" onClick={e => { e.preventDefault(); select('') }}>TC Papers</a>
+      {/* Understanding mode renders its toolbar here, so the whole header is one slim row. */}
+      {studying && <div class="topbar-slot" ref={setToolbarSlot} />}
       <div class="top-actions">
         <button class="icon" aria-label={theme === 'light' ? t.toDark : t.toLight} title={theme === 'light' ? t.toDark : t.toLight} onClick={toggleTheme}>{theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}</button>
         <button class="icon" aria-label={t.settings} title={t.settings} onClick={() => setSettings(true)}><Settings2 size={18} /></button>
       </div>
     </header>
 
-    <main class={selected && mode === 'study' ? 'wide' : ''}>
-      {selected && mode === 'study' ? <StudyView paper={selected} t={t} locale={locale} onBack={() => select('')} onMode={m => select(selected.id, m)} />
+    <main class={studying ? 'wide' : ''}>
+      {selected && studying ? <StudyView paper={selected} t={t} locale={locale} toolbarSlot={toolbarSlot} onBack={() => select('')} onMode={m => select(selected.id, m)} />
         : selected ? <ReviewView paper={selected} t={t} onBack={() => select('')} onMode={m => select(selected.id, m)} onRerun={() => void rerun(selected)} onRemove={() => remove(selected)} /> : <>
         <button class="dropzone" onClick={() => fileRef.current?.click()}>
           <FileUp size={28} strokeWidth={1.5} />
