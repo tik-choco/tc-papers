@@ -213,7 +213,8 @@ main.wide { padding-bottom: 0 }
 .ask textarea:focus { outline: 2px solid var(--primary); outline-offset: 0 }
 .send { width: 44px; height: 44px; padding: 0 }
 .follow-ups { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .5rem }
-.follow-ups button { padding: .3rem .7rem; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); font-size: .82rem; text-align: left }
+/* A fixed radius (not a pill) so questions that wrap to several lines keep balanced corners. */
+.follow-ups button { padding: .35rem .7rem; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); font-size: .82rem; line-height: 1.45; text-align: left }
 .follow-ups button:hover { border-color: var(--primary); color: var(--primary) }
 .selection-chip { display: flex; align-items: flex-start; gap: .4rem; margin-bottom: .5rem; padding: .4rem .5rem .4rem .75rem; border-radius: 10px; background: color-mix(in srgb, var(--primary) 9%, var(--surface)); font-size: .85rem }
 .selection-chip span { flex: 1; min-width: 0 }
@@ -307,7 +308,9 @@ body.resizing-y, body.resizing-y * { cursor: row-resize !important; user-select:
 .panel-pdf .panel-body { padding: 0 }
 .panel .pdf-pane { position: static; height: 100%; border: 0; border-radius: 0 }
 .panel .ask { position: static; margin: 0; padding: 0; background: none }
-.panel-ask .panel-body { display: flex; flex-direction: column; justify-content: flex-end }
+/* Bottom-aligned with an auto margin: justify-content: flex-end would make overflow above unreachable. */
+.panel-ask .panel-body { display: flex; flex-direction: column }
+.panel-ask .ask { margin-top: auto }
 .to-graph { display: none }
 
 /* Phones: panels stack in reading order and the page scrolls; only collapsing and hiding apply. */
@@ -348,3 +351,18 @@ main.wide { max-width: none; padding: 0 .5rem }
   .study-bar { flex-wrap: wrap }
   .study-bar .study-title { flex-basis: 100%; order: -1; white-space: normal }
 }
+
+/* Maximized panel: lifted over the workspace (a placeholder keeps its slot). Once the opening animation has
+   settled, the panels underneath are hidden so they drop out of the tab order. */
+.panel.maximized { position: absolute; inset: 0; z-index: 20; box-shadow: 0 12px 40px #0003; will-change: clip-path }
+.panel.maximized .panel-head { cursor: default }
+.panel-placeholder { flex: none; min-height: 0; border-radius: 12px; background: color-mix(in srgb, var(--border) 35%, transparent) }
+.workspace.settled .panel:not(.maximized), .workspace.settled .gap, .workspace.settled .panel-placeholder { visibility: hidden }
+@media (max-width: 959px) {
+  /* On a phone it becomes full screen. */
+  .panel.maximized { position: fixed; z-index: 45; border-radius: 0; border: 0 }
+  .panel.maximized .panel-body { height: auto; flex: 1; overflow: auto }
+}
+.esc-hint { flex: none; display: inline-flex; align-items: center; gap: .3rem; margin-right: .15rem; font-size: .72rem; color: var(--muted); white-space: nowrap }
+kbd { display: inline-block; min-width: 1.6em; padding: .05rem .35rem; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 5px; background: var(--surface); font: 600 .68rem/1.3 ui-monospace, "SFMono-Regular", Consolas, monospace; color: var(--text); text-align: center }
+@media (max-width: 959px) { .esc-hint { display: none } }

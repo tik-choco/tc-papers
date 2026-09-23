@@ -1,10 +1,10 @@
 import { useLayoutEffect, useRef, useState } from 'preact/hooks'
 import type { ComponentChildren } from 'preact'
-import { ChevronDown, ChevronRight, GripVertical, X } from 'lucide-preact'
+import { ChevronDown, ChevronRight, GripVertical, Maximize2, Minimize2, X } from 'lucide-preact'
 import { MAX_COLUMNS, movePanel, setCollapsed, setHidden, type DropTarget, type PanelId, type StudyLayout } from '../lib/layout'
 
 export interface PanelDef { title: string; body: ComponentChildren }
-interface Labels { collapse: string; expand: string; hide: string; dragHint: string }
+interface Labels { collapse: string; expand: string; hide: string; maximize: string; restore: string; escHint: string; dragHint: string }
 
 const MIN_W = 220, MIN_H = 90
 const wide = () => typeof matchMedia === 'undefined' || matchMedia('(min-width: 960px)').matches
@@ -22,6 +22,58 @@ export function Workspace({ layout, onLayout, panels, labels }: { layout: StudyL
   const [height, setHeight] = useState<number | null>(null)
   const latest = useRef(layout)
   latest.current = layout
+  // Temporary, never saved: one panel is lifted over the workspace while a same-sized placeholder keeps its slot,
+  // so nothing else reflows, the PDF is not reloaded and a half-typed question survives.
+  const [maxed, setMaxed] = useState<{ id: PanelId; slot: { w: number; h: number } } | null>(null)
+  const [settled, setSettled] = useState(false)
+  const max = maxed && layout.cols.some(col => col.panels.some(p => p.id === maxed.id)) ? maxed.id : null
+  const anim = useRef<Animation | null>(null)
+  const opening = useRef(false)
+  const closing = useRef(false)
+  const panelEl = (id: PanelId) => root.current?.querySelector<HTMLElement>(`[data-panel="${id}"]`)
+
+  function maximize(id: PanelId) {
+    const el = panelEl(id)
+    if (max || !el) return
+    const r = el.getBoundingClientRect()
+    opening.current = true
+    setSettled(false)
+    setMaxed({ id, slot: { w: r.width, h: r.height } })
+  }
+  function restore() {
+    const el = max && panelEl(max), slot = root.current?.querySelector<HTMLElement>('.panel-placeholder')
+    if (!max || !el || !slot || closing.current) return
+    closing.current = true
+    setSettled(false)
+    void reveal(el, slot.getBoundingClientRect(), true).then(() => { closing.current = false; setMaxed(null) })
+  }
+  /** Grows (or shrinks) the visible area between the slot and the full panel; clipping never distorts the content. */
+  function reveal(el: HTMLElement, slot: DOMRect, closingNow: boolean): Promise<void> {
+    anim.current?.cancel()
+    if (typeof el.animate !== 'function' || matchMedia('(prefers-reduced-motion: reduce)').matches) return Promise.resolve()
+    const f = el.getBoundingClientRect()
+    const small = `inset(${slot.top - f.top}px ${f.right - slot.right}px ${f.bottom - slot.bottom}px ${slot.left - f.left}px round 12px)`
+    const full = 'inset(0px 0px 0px 0px round 12px)'
+    anim.current = el.animate({ clipPath: closingNow ? [full, small] : [small, full] },
+      { duration: closingNow ? 220 : 280, easing: closingNow ? 'cubic-bezier(.4,0,.2,1)' : 'cubic-bezier(.2,.8,.2,1)', fill: closingNow ? 'forwards' : 'none' })
+    return anim.current.finished.then(() => {}, () => {})
+  }
+  useLayoutEffect(() => {
+    if (max && opening.current) {
+      opening.current = false
+      const el = panelEl(max), slot = root.current?.querySelector<HTMLElement>('.panel-placeholder')
+      if (el && slot) void reveal(el, slot.getBoundingClientRect(), false).then(() => setSettled(true))
+      else setSettled(true)
+    }
+    // The closing clip is held until the panel is back in its slot; drop it before that frame is painted.
+    if (!max && anim.current) { anim.current.cancel(); anim.current = null }
+  }, [max])
+  useLayoutEffect(() => {
+    if (!max) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') restore() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [max])
 
   // Fill the window below the toolbar exactly, so the page itself never scrolls on wide screens.
   const fit = () => {
@@ -59,7 +111,7 @@ export function Workspace({ layout, onLayout, panels, labels }: { layout: StudyL
   const isAlone = (id: PanelId) => latest.current.cols.some(col => col.panels.length === 1 && col.panels[0]!.id === id)
 
   function startDrag(e: PointerEvent, id: PanelId) {
-    if (e.button !== 0 || !wide() || (e.target as HTMLElement).closest('button, select, input, textarea, a')) return
+    if (e.button !== 0 || !wide() || max || (e.target as HTMLElement).closest('button, select, input, textarea, a')) return
     const sx = e.clientX, sy = e.clientY
     let started = false
     const move = (ev: PointerEvent) => {
@@ -119,27 +171,37 @@ export function Workspace({ layout, onLayout, panels, labels }: { layout: StudyL
     onLayout(apply(l, c, p, (wa + wb) / 2, (wa + wb) / 2))
   }
 
-  return <div ref={root} class={`workspace ${drag ? 'dragging' : ''}`} style={height ? { height: height + 'px' } : undefined}>
+  return <div ref={root} class={`workspace ${drag ? 'dragging' : ''} ${max ? 'has-max' : ''} ${max && settled ? 'settled' : ''}`} style={height ? { height: height + 'px' } : undefined}>
     {layout.cols.map((col, c) => [
       c > 0 && <div key={'gx' + c} class="gap gap-x" role="separator" aria-orientation="vertical" onPointerDown={e => startResize(e, c - 1, null)} onDblClick={() => even(c - 1, null)} />,
       <div key={col.panels[0]!.id} class="ws-col" style={{ flex: `${col.w} 1 0` }}>
         {col.panels.map((slot, p) => {
           const def = panels[slot.id]
           const blocked = slot.collapsed || col.panels[p - 1]?.collapsed
+          const isMax = slot.id === max
+          const collapsed = slot.collapsed && !isMax
           return [
             p > 0 && <div key={'gy' + slot.id} class={`gap gap-y ${blocked ? 'blocked' : ''}`} role="separator" aria-orientation="horizontal"
               onPointerDown={e => { if (!blocked) startResize(e, c, p - 1) }} onDblClick={() => { if (!blocked) even(c, p - 1) }} />,
-            <section key={slot.id} data-panel={slot.id} class={`panel panel-${slot.id} ${slot.collapsed ? 'collapsed' : ''} ${drag?.id === slot.id ? 'lifted' : ''}`}
-              style={{ flex: slot.collapsed ? 'none' : `${slot.h} 1 0` }} aria-label={def.title}>
-              <header class="panel-head" onPointerDown={e => startDrag(e, slot.id)} title={labels.dragHint}>
+            <section key={slot.id} data-panel={slot.id} class={`panel panel-${slot.id} ${collapsed ? 'collapsed' : ''} ${isMax ? 'maximized' : ''} ${drag?.id === slot.id ? 'lifted' : ''}`}
+              style={{ flex: collapsed ? 'none' : `${slot.h} 1 0` }} aria-label={def.title}>
+              <header class="panel-head" onPointerDown={e => startDrag(e, slot.id)} title={isMax ? undefined : labels.dragHint}
+                onDblClick={e => { if (!(e.target as HTMLElement).closest('button')) isMax ? restore() : maximize(slot.id) }}>
                 <GripVertical size={14} class="grip" />
-                <button type="button" class="icon" aria-label={slot.collapsed ? labels.expand : labels.collapse} title={slot.collapsed ? labels.expand : labels.collapse}
-                  onClick={() => onLayout(setCollapsed(latest.current, slot.id, !slot.collapsed))}>{slot.collapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}</button>
+                {!isMax && <button type="button" class="icon" aria-label={slot.collapsed ? labels.expand : labels.collapse} title={slot.collapsed ? labels.expand : labels.collapse}
+                  onClick={() => onLayout(setCollapsed(latest.current, slot.id, !slot.collapsed))}>{slot.collapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}</button>}
                 <h2>{def.title}</h2>
-                <button type="button" class="icon" aria-label={labels.hide} title={labels.hide} onClick={() => onLayout(setHidden(latest.current, slot.id, true))}><X size={14} /></button>
+                {/* Keyboard shortcut reminder; hidden on touch-width screens, which have no Esc key. */}
+                {isMax && <span class="esc-hint" aria-hidden="true"><kbd>Esc</kbd>{labels.escHint}</span>}
+                <button type="button" class="icon" aria-label={isMax ? labels.restore : labels.maximize} title={isMax ? labels.restore : labels.maximize}
+                  onClick={() => isMax ? restore() : maximize(slot.id)}>{isMax ? <Minimize2 size={14} /> : <Maximize2 size={14} />}</button>
+                {!isMax && <button type="button" class="icon" aria-label={labels.hide} title={labels.hide} onClick={() => onLayout(setHidden(latest.current, slot.id, true))}><X size={14} /></button>}
               </header>
-              {!slot.collapsed && <div class="panel-body">{def.body}</div>}
+              {!collapsed && <div class="panel-body">{def.body}</div>}
             </section>,
+            // Holds the lifted panel's place so the rest of the layout does not move.
+            isMax && maxed && <div key={'ph' + slot.id} class="panel-placeholder" aria-hidden="true"
+              style={wide() ? { flex: slot.collapsed ? `0 0 ${maxed.slot.h}px` : `${slot.h} 1 0` } : { height: maxed.slot.h + 'px' }} />,
           ]
         })}
       </div>,

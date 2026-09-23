@@ -149,6 +149,30 @@ test('panels can be dragged, split, resized, hidden and are remembered', async (
   await page.mouse.up()
   expect(Math.abs(await pdfWidth() - (before - 120))).toBeLessThan(3)
 
+  // Maximize is temporary: one panel fills the workspace, the others keep their state, Esc or the button restores.
+  await page.getByRole('textbox', { name: 'Ask' }).fill('half-typed question')
+  const workspaceWidth = (await page.locator('.workspace').boundingBox())!.width
+  const columnsBefore = await page.locator('[data-panel="graph"]').boundingBox()
+  await page.locator('[data-panel="pdf"]').getByRole('button', { name: /^Maximize/ }).click()
+  // It grows out of its slot with an eased clip animation; the other panels do not move meanwhile.
+  expect(await page.locator('.panel.maximized').evaluate(el => el.getAnimations().map(a => (a.effect as KeyframeEffect).getKeyframes()[0]!.clipPath))).toEqual([expect.stringMatching(/^inset\(/)])
+  expect(await page.locator('[data-panel="graph"]').boundingBox()).toEqual(columnsBefore)
+  await expect(page.locator('[data-panel="graph"]')).toBeHidden()
+  await expect(page.locator('.panel.maximized .esc-hint')).toHaveText('Escto restore')
+  await page.locator('.panel.maximized .panel-head').screenshot({ path: '.test-output/maximized-head.png' })
+  expect(Math.abs((await page.locator('[data-panel="pdf"]').boundingBox())!.width - workspaceWidth)).toBeLessThan(2)
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-panel="graph"]')).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Ask' })).toHaveValue('half-typed question')
+  await expect(page.locator('.panel.maximized')).toHaveCount(0) // after the closing animation
+  await expect(page.locator('.panel-placeholder')).toHaveCount(0)
+  await head('tree').dblclick()
+  await expect(page.locator('[data-panel="tree"].maximized')).toBeVisible()
+  await expect(page.locator('[data-panel="pdf"]')).toBeHidden()
+  await page.locator('[data-panel="tree"]').getByRole('button', { name: /^Restore/ }).click()
+  await expect(page.locator('.panel.maximized')).toHaveCount(0)
+  expect(await columns()).toEqual([['pdf'], ['ask', 'graph'], ['tree'], ['focus']])
+
   // Collapse, hide and bring back.
   await page.locator('[data-panel="tree"]').getByRole('button', { name: 'Collapse' }).click()
   await expect(page.locator('[data-panel="tree"] .panel-body')).toHaveCount(0)
