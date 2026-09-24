@@ -75,6 +75,8 @@ export const COPY = {
       language: '出力言語（グラフ・ツリー・回答）',
       langMismatch: (from: string, to: string) => `このノートは${from}で書かれています。これからの回答は${to}で追加されます。`,
       translate: (to: string) => `${to}に翻訳（ツリーはそのまま）`,
+      tidy: '整理', tidyHint: '重複をまとめ、置き場所と順序を整えて理解ツリーを整理します（元に戻せます）', tidying: 'ツリーを整理しています',
+      tidied: (n: number) => `理解ツリーを整理しました（${n} か所）。`, tidyNone: '整理が必要な箇所は見つかりませんでした。', undo: '元に戻す',
       kinds: { background: '背景', problem: '問題', gap: '未解決点', claim: '主張', method: '手法', experiment: '実験', result: '結果', limitation: '限界', implication: '意義', concept: '概念' } as Record<StoryKind, string>,
     },
     viewer: {
@@ -173,6 +175,8 @@ export const COPY = {
       language: 'Output language (graph, tree, answers)',
       langMismatch: (from: string, to: string) => `These notes are in ${from}. New answers will be added in ${to}.`,
       translate: (to: string) => `Translate to ${to} (keeps the tree)`,
+      tidy: 'Tidy', tidyHint: 'Tidy the understanding tree: merge duplicates, fix placement and order (can be undone)', tidying: 'Tidying the tree',
+      tidied: (n: number) => `Tidied the understanding tree (${n} change${n === 1 ? '' : 's'}).`, tidyNone: 'Nothing needed tidying.', undo: 'Undo',
       kinds: { background: 'Background', problem: 'Problem', gap: 'Gap', claim: 'Claim', method: 'Method', experiment: 'Experiment', result: 'Result', limitation: 'Limitation', implication: 'Implication', concept: 'Concept' } as Record<StoryKind, string>,
     },
     viewer: {

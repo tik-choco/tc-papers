@@ -33,6 +33,16 @@ export function loadStudyLang(locale: Locale): StudyLang {
 }
 export function saveStudyLang(lang: StudyLang) { try { localStorage.setItem(LANG_KEY, lang) } catch { /* session only */ } }
 
+/** Collapsed node and bullet ids in the understanding tree, per paper. A view setting, so it is not backed up. */
+const collapsedKey = (paperId: string) => `tc-papers:collapsed-v1:${paperId}`
+export function loadCollapsed(paperId: string): Set<string> {
+  try { const saved: unknown = JSON.parse(localStorage.getItem(collapsedKey(paperId)) || '[]'); if (Array.isArray(saved)) return new Set(saved.filter(id => typeof id === 'string')) } catch { /* none below */ }
+  return new Set()
+}
+export function saveCollapsed(paperId: string, ids: Set<string>) {
+  try { if (ids.size) localStorage.setItem(collapsedKey(paperId), JSON.stringify([...ids])); else localStorage.removeItem(collapsedKey(paperId)) } catch { /* session only */ }
+}
+
 /** Stated in the system prompt and again after the paper, which otherwise pulls the model into its own language. */
 const languageRule = (lang: StudyLang) =>
   `Write every prose field (thesis, labels, summaries, bullets, edge labels, questions) in ${STUDY_LANGS[lang].name}, even when the paper is written in another language. When you translate a technical term, give the original term in parentheses the first time it appears.`
@@ -167,6 +177,19 @@ function mapPoint(points: StudyPoint[], id: string, update: (p: StudyPoint) => S
   return points.map(p => p.id === id ? update(p) : { ...p, children: mapPoint(p.children, id, update) })
 }
 
+/** The node ids and bullet ids that contain any of `ids`, so collapsed branches can open to show them. */
+export function ancestorsOf(study: Study, ids: Iterable<string>): Set<string> {
+  const wanted = new Set(ids), found = new Set<string>()
+  const walk = (points: StudyPoint[], path: string[]): void => {
+    for (const p of points) {
+      if (wanted.has(p.id)) path.forEach(id => found.add(id))
+      walk(p.children, [...path, p.id])
+    }
+  }
+  for (const [nodeId, points] of Object.entries(study.tree)) walk(points, [nodeId])
+  return found
+}
+
 /**
  * Adds a parsed answer to the study without mutating it. Unknown node ids fall back to the node the reader
  * was looking at; unknown bullet ids fall back to top level, so a sloppy placement never loses the answer.
@@ -246,6 +269,158 @@ function refineGraph(nodes: StoryNode[], edges: StoryEdge[], obj: Record<string,
     changed.nodes.push(id)
   }
   return { nodes, edges, changed }
+}
+
+// --- Tidying a grown tree ---------------------------------------------------
+
+export const TIDY_SCHEMA = '{"mergeNodes": [{"keep": string, "drop": string, "summary": string}], "merge": [{"keep": string, "drop": string[], "text": string}], "group": [{"nodeId": string, "parentId": string|null, "text": string, "ids": string[]}], "move": [{"id": string, "nodeId": string, "parentId": string|null}], "order": [{"nodeId": string, "parentId": string|null, "ids": string[]}]}'
+const TIDY_KEYS = ['mergeNodes', 'merge', 'group', 'move', 'order']
+const MAX_TIDY_OPS = 40
+
+export function tidyPrompt(lang: StudyLang) {
+  return [
+    "You tidy a reader's understanding tree of a research paper. The tree grew one answer at a time, so it collects duplicates, bullets under the wrong story node, long flat lists and related points scattered apart.",
+    'You never rewrite the tree; you return edit operations that refer to the ids in the outline (bullets as #id without the #, story nodes as n1, n2, …). Never lose information: merging keeps what each bullet said. Change only what clearly makes the tree easier to read; for a tree that is already tidy, return empty lists.',
+    'mergeNodes: two story nodes that are really the same thing (typically a concept node added twice under different names). keep, drop, and summary (the merged 1–2 sentence summary, or "" to keep keep\'s).',
+    'merge: bullets that say the same thing. keep = the bullet that stays, drop = the bullets folded into it (their children move under keep), text = the merged wording, or "" to keep keep\'s text.',
+    'group: 2 or more sibling-ish bullets about one sub-topic that sit apart or make a long flat list. Creates a new bullet with text (a short heading, no page) at nodeId / parentId (null = top level) and moves ids under it.',
+    'move: a bullet that belongs to another story node or under another bullet. Moves it with its children.',
+    `order: reorder the children of one place (nodeId, parentId or null) so they read in a logical order (idea before detail, cause before effect); ids lists them in the new order. The tree holds at most ${MAX_DEPTH} levels.`,
+    'Return a single JSON object, no code fences:',
+    TIDY_SCHEMA,
+    languageRule(lang),
+    MATH_RULE,
+  ].join('\n')
+}
+
+export const tidyMessage = (study: Study, lang: StudyLang) =>
+  ['Current story graph and understanding tree:', outline(study), '', `Tidy this tree. ${languageRule(lang)} Reply with only the JSON object in exactly this schema: ${TIDY_SCHEMA}`].join('\n')
+
+const bare = (value: unknown) => str(value, 60).replace(/^\[|\]$/g, '').replace(/^#/, '')
+const sameText = (a: string, b: string) => a.toLowerCase().replace(/[\s.。、,，]+/g, '') === b.toLowerCase().replace(/[\s.。、,，]+/g, '')
+
+/**
+ * Applies the edit operations of a tidy reply without mutating the study. Every operation that points at an
+ * unknown id, or would put a bullet inside itself, is skipped, and no operation deletes text: merged bullets
+ * keep their children and the merged wording is the model's. Afterwards identical siblings are folded together
+ * and anything deeper than MAX_DEPTH is lifted up, so the tree is well-formed whatever the reply held.
+ */
+export function applyTidy(study: Study, raw: string): { study: Study; ops: number; points: string[]; nodes: string[] } {
+  // `{"operations": {…}}` → the inner object, whichever of the keys it holds.
+  const obj = TIDY_KEYS.reduce((o, key) => unwrap(o, key), extractJson(raw))
+  if (!TIDY_KEYS.some(key => Array.isArray(obj[key]))) throw new Error('AI_INVALID_RESPONSE')
+  const list = (key: string) => (Array.isArray(obj[key]) ? obj[key] as unknown[] : []).filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+  const clone = (p: StudyPoint): StudyPoint => ({ ...p, children: p.children.map(clone) })
+  const tree: Record<string, StudyPoint[]> = Object.fromEntries(study.nodes.map(n => [n.id, (study.tree[n.id] || []).map(clone)]))
+  let nodes = study.nodes, edges = study.edges, questionList = study.questions
+  const touched = { points: new Set<string>(), nodes: new Set<string>() }
+  let ops = 0
+  const spend = () => ops < MAX_TIDY_OPS
+
+  const locate = (id: string): { siblings: StudyPoint[]; point: StudyPoint; nodeId: string } | undefined => {
+    const walk = (siblings: StudyPoint[], nodeId: string): ReturnType<typeof locate> => {
+      for (const point of siblings) { if (point.id === id) return { siblings, point, nodeId }; const hit = walk(point.children, nodeId); if (hit) return hit }
+    }
+    for (const nodeId of Object.keys(tree)) { const hit = walk(tree[nodeId]!, nodeId); if (hit) return hit }
+  }
+  const detach = (id: string) => {
+    const at = locate(id)
+    if (at) at.siblings.splice(at.siblings.indexOf(at.point), 1)
+    return at?.point
+  }
+  const inside = (point: StudyPoint, id: string): boolean => point.id === id || point.children.some(c => inside(c, id))
+  /** The children list of a place: a bullet (if found and not within `moving`), else a node's top level. */
+  const place = (nodeId: unknown, parentId: unknown, moving: StudyPoint[] = []): StudyPoint[] | undefined => {
+    const parent = typeof parentId === 'string' && bare(parentId) ? locate(bare(parentId)) : undefined
+    if (parent) return moving.some(m => inside(m, parent.point.id)) ? undefined : parent.point.children
+    return tree[bare(nodeId)]
+  }
+
+  for (const item of list('mergeNodes')) {
+    const keep = bare(item.keep), drop = bare(item.drop)
+    if (!spend() || keep === drop || !tree[keep] || !tree[drop]) continue
+    const gone = nodes.find(n => n.id === drop)!
+    const summary = str(item.summary, 600)
+    nodes = nodes.filter(n => n !== gone).map(n => n.id === keep ? { ...n, summary: summary || n.summary, pages: [...new Set([...n.pages, ...gone.pages])].sort((a, b) => a - b).slice(0, 10) } : n)
+    const seen = new Set<string>()
+    edges = edges.map(e => ({ ...e, from: e.from === drop ? keep : e.from, to: e.to === drop ? keep : e.to })).filter(e => {
+      const key = e.from + '>' + e.to
+      if (e.from === e.to || seen.has(key)) return false
+      seen.add(key); return true
+    })
+    questionList = questionList.map(q => q.nodeId === drop ? { ...q, nodeId: keep } : q)
+    tree[keep]!.push(...tree[drop]!)
+    delete tree[drop]
+    touched.nodes.add(keep); ops++
+  }
+
+  for (const item of list('merge')) {
+    const keep = locate(bare(item.keep))
+    if (!spend() || !keep) continue
+    let merged = 0
+    for (const id of (Array.isArray(item.drop) ? item.drop : []).map(bare)) {
+      const at = locate(id)
+      // A bullet that holds `keep` cannot be folded into it.
+      if (!at || inside(at.point, keep.point.id)) continue
+      detach(id)
+      keep.point.children.push(...at.point.children)
+      keep.point.page ??= at.point.page
+      if (!keep.point.q && at.point.q) keep.point.q = at.point.q
+      merged++
+    }
+    const text = str(item.text, 600)
+    if (!merged && (!text || text === keep.point.text)) continue
+    if (text) keep.point.text = text
+    touched.points.add(keep.point.id); ops++
+  }
+
+  for (const item of list('group')) {
+    const text = str(item.text, 600)
+    const members = [...new Set((Array.isArray(item.ids) ? item.ids : []).map(bare))].map(locate).filter((at): at is NonNullable<typeof at> => !!at)
+    // Members nested in another member travel with it.
+    const top = members.filter(m => !members.some(o => o !== m && inside(o.point, m.point.id)))
+    if (!spend() || !text || top.length < 2) continue
+    const target = place(item.nodeId ?? top[0]!.nodeId, item.parentId, top.map(m => m.point)) || tree[top[0]!.nodeId]!
+    const group: StudyPoint = { id: newId(), text, page: null, children: [] }
+    // The heading takes the place of the first member when it sits where the group goes.
+    const first = target.indexOf(top[0]!.point)
+    target.splice(first < 0 ? target.length : first, 0, group)
+    for (const m of top) { detach(m.point.id); group.children.push(m.point) }
+    touched.points.add(group.id); ops++
+  }
+
+  for (const item of list('move')) {
+    const at = locate(bare(item.id))
+    const target = at && place(item.nodeId, item.parentId, [at.point])
+    if (!spend() || !at || !target || target === at.siblings) continue
+    detach(at.point.id)
+    target.push(at.point)
+    touched.points.add(at.point.id); ops++
+  }
+
+  for (const item of list('order')) {
+    const target = place(item.nodeId, item.parentId)
+    if (!spend() || !target) continue
+    const rank = new Map((Array.isArray(item.ids) ? item.ids : []).map(bare).map((id, i) => [id, i]))
+    // Bullets the reply did not list keep their relative order after the listed ones.
+    const next = target.map((p, i) => ({ p, key: rank.get(p.id) ?? rank.size + i })).sort((a, b) => a.key - b.key).map(x => x.p)
+    if (next.every((p, i) => p === target[i])) continue
+    target.splice(0, target.length, ...next)
+    ops++
+  }
+
+  const flatten = (points: StudyPoint[]): StudyPoint[] => points.flatMap(p => [{ ...p, children: [] }, ...flatten(p.children)])
+  const normalize = (points: StudyPoint[], depth: number): StudyPoint[] => {
+    const out: StudyPoint[] = []
+    for (const p of points) {
+      const twin = out.find(o => sameText(o.text, p.text))
+      if (twin) { twin.children.push(...p.children); twin.page ??= p.page; ops++; continue }
+      out.push({ ...p, children: [...p.children] })
+    }
+    return out.flatMap(p => depth < MAX_DEPTH ? [{ ...p, children: normalize(p.children, depth + 1) }] : flatten([p]))
+  }
+  const cleaned = Object.fromEntries(Object.entries(tree).map(([id, points]) => [id, normalize(points, 1)]))
+  return { study: { ...study, nodes, edges, tree: cleaned, questions: questionList }, ops, points: [...touched.points], nodes: [...touched.nodes] }
 }
 
 // --- Translation of an existing study ---------------------------------------

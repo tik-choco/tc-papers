@@ -32,6 +32,12 @@ async function setup(page: Page) {
   await page.route(API + '/chat/completions', async route => {
     const messages = route.request().postDataJSON().messages
     const system = String(messages[0].content)
+    if (system.includes('You tidy')) {
+      // Groups the method's two bullets under a heading.
+      const ids = [...String(messages[1].content).matchAll(/\[#(\w+)\] (?:Replaces dense attention|Score)/g)].map(m => m[1])
+      const content = { group: [{ nodeId: 'n2', parentId: null, text: 'How LSH attention works', ids }] }
+      return route.fulfill({ json: { choices: [{ message: { content: JSON.stringify(content) } }] } })
+    }
     if (system.includes('patient tutor')) {
       asks.push(messages[1].content)
       const parent = /\[#(\w+)\] Replaces dense attention/.exec(messages[1].content)?.[1]
@@ -119,6 +125,46 @@ test('understanding mode maps the story and grows the tree with every question',
   expect(errors).toEqual([])
 })
 
+test('tidying regroups the tree and can be undone', async ({ page }) => {
+  await setup(page)
+  await page.goto('/')
+  await page.locator('input[type=file]').setInputFiles({ name: 'sparse.pdf', mimeType: 'application/pdf', buffer: pdfFixture() })
+  await expect(page.locator('.not-reviewed')).toBeVisible({ timeout: 20_000 })
+  await page.getByRole('tab', { name: 'Understand' }).click()
+  await page.getByRole('button', { name: 'Map the story' }).click()
+  await expect(page.locator('.story-node')).toHaveCount(4, { timeout: 20_000 })
+
+  const method = page.locator('.tree-root > li', { hasText: 'LSH buckets' })
+  await expect(method.locator(':scope > ul > li')).toHaveCount(2)
+  await page.getByRole('button', { name: 'Tidy', exact: true }).click()
+  await expect(page.getByRole('status')).toContainText('Tidied the understanding tree (1 change)')
+  await expect(method.locator(':scope > ul > li')).toHaveCount(1)
+  await expect(method.locator(':scope > ul > li.fresh > .pt')).toHaveText('How LSH attention works')
+  await expect(method.locator(':scope > ul > li > ul > li')).toHaveCount(2)
+  await page.reload()
+  await expect(method.locator(':scope > ul > li')).toHaveCount(1)
+
+  // Branches fold away, and stay folded after a reload; a whole node's bullets fold too.
+  const group = method.locator(':scope > ul > li')
+  await group.getByRole('button', { name: 'Collapse' }).click()
+  await expect(group.locator('li')).toHaveCount(0)
+  await expect(group.locator('.fold-count')).toHaveText('+2')
+  await page.reload()
+  await expect(group.locator('li')).toHaveCount(0)
+  await group.locator('.fold-count').click()
+  await expect(group.locator('li')).toHaveCount(2)
+  await method.locator('.node-row').getByRole('button', { name: 'Collapse' }).click()
+  await expect(method.locator('ul')).toHaveCount(0)
+  await method.locator('.node-row').getByRole('button', { name: 'Expand' }).click()
+  await expect(group.locator('li')).toHaveCount(2)
+
+  await page.getByRole('button', { name: 'Tidy', exact: true }).click()
+  await expect(page.getByRole('status')).toBeVisible()
+  await page.getByRole('button', { name: 'Undo' }).click()
+  await expect(method.locator(':scope > ul > li')).toHaveCount(1)
+  await expect(page.getByRole('status')).toHaveCount(0)
+})
+
 test('panels can be dragged, split, resized, hidden and are remembered', async ({ page }) => {
   await setup(page)
   await page.goto('/')
@@ -184,7 +230,7 @@ test('panels can be dragged, split, resized, hidden and are remembered', async (
   expect(await columns()).toEqual([['pdf'], ['ask', 'graph'], ['tree'], ['focus']])
 
   // Collapse, hide and bring back.
-  await page.locator('[data-panel="tree"]').getByRole('button', { name: 'Collapse' }).click()
+  await page.locator('[data-panel="tree"] .panel-head').getByRole('button', { name: 'Collapse' }).click()
   await expect(page.locator('[data-panel="tree"] .panel-body')).toHaveCount(0)
   await page.locator('[data-panel="pdf"]').getByRole('button', { name: 'Hide panel' }).click()
   await expect(page.locator('[data-panel="pdf"]')).toHaveCount(0)

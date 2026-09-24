@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { applyAnswer, applyTranslation, askMessage, isStudy, layoutStory, loadStudyLang, outline, parseStory, saveStudyLang, storyPrompt, storyReminder, studyTexts, studyToMarkdown } from './study'
+import { ancestorsOf, applyAnswer, applyTidy, applyTranslation, askMessage, isStudy, layoutStory, loadStudyLang, outline, parseStory, saveStudyLang, storyPrompt, storyReminder, studyTexts, studyToMarkdown } from './study'
 import { COPY } from '../copy'
+import type { StudyPoint } from '../types'
 
 const story = JSON.stringify({
   thesis: 'Sparse attention makes long documents cheap.',
@@ -85,6 +86,70 @@ describe('applyAnswer', () => {
   })
 })
 
+describe('applyTidy', () => {
+  const q = { text: 'Why?', askedAt: '2026-01-01T00:00:00Z', model: 'm' }
+  // n1: [O(n²) memory, Quadratic memory, Pairs grow as n² > [detail]], plus a duplicate concept node n5/n6.
+  let grown = parseStory(story, 'm')
+  for (const raw of [
+    { nodeId: 'n1', points: [{ text: 'Quadratic memory', children: [{ text: 'n=64k → 4G pairs' }] }] },
+    { nodeId: 'n1', points: [{ text: 'Pairs grow as n²', children: ['detail'] }] },
+    { newNode: { kind: 'concept', label: 'LSH', summary: 'Hashing.', from: 'n2' }, points: [{ text: 'Buckets' }] },
+    { newNode: { kind: 'concept', label: 'Locality hashing', summary: 'Same thing.', from: 'n3' }, points: [{ text: 'Similar vectors collide' }] },
+  ]) grown = applyAnswer(grown, JSON.stringify(raw), q).study
+  const [a, b, c] = grown.tree.n1!
+  const texts = (points: typeof grown.tree.n1) => points!.map(p => p.text)
+
+  it('merges duplicate bullets and keeps their children', () => {
+    const { study, ops, points } = applyTidy(grown, JSON.stringify({ merge: [{ keep: '#' + a!.id, drop: [b!.id], text: 'Memory grows as O(n²)' }] }))
+    expect(texts(study.tree.n1)).toEqual(['Memory grows as O(n²)', 'Pairs grow as n²'])
+    expect(study.tree.n1![0]!.children.map(p => p.text)).toEqual(['n=64k → 4G pairs'])
+    expect(study.tree.n1![0]!.q).toBe(b!.q)
+    expect(ops).toBe(1); expect(points).toEqual([a!.id])
+    expect(grown.tree.n1).toHaveLength(3) // not mutated
+  })
+  it('merges duplicate nodes and rewires edges and questions', () => {
+    const { study, nodes } = applyTidy(grown, JSON.stringify({ mergeNodes: [{ keep: 'n5', drop: '[n6]', summary: '' }] }))
+    expect(study.nodes.map(n => n.id)).not.toContain('n6')
+    expect(texts(study.tree.n5)).toEqual(['Buckets', 'Similar vectors collide'])
+    expect(study.tree.n6).toBeUndefined()
+    expect(study.edges.some(e => e.from === 'n6' || e.to === 'n6')).toBe(false)
+    expect(study.edges).toContainEqual(expect.objectContaining({ from: 'n3', to: 'n5' }))
+    expect(study.questions.at(-1)!.nodeId).toBe('n5')
+    expect(nodes).toEqual(['n5'])
+  })
+  it('groups, moves and reorders bullets', () => {
+    const { study } = applyTidy(grown, JSON.stringify({
+      group: [{ nodeId: 'n1', parentId: null, text: 'Cost', ids: [a!.id, c!.id] }],
+      move: [{ id: b!.id, nodeId: 'n3', parentId: null }],
+      order: [{ nodeId: 'n1', parentId: null, ids: [] }],
+    }))
+    expect(texts(study.tree.n1)).toEqual(['Cost'])
+    expect(texts(study.tree.n1![0]!.children)).toEqual(['O(n²) memory', 'Pairs grow as n²'])
+    expect(texts(study.tree.n3)).toEqual(['Quadratic memory'])
+    const reordered = applyTidy(grown, JSON.stringify({ order: [{ nodeId: 'n1', ids: [c!.id, a!.id] }] })).study
+    expect(texts(reordered.tree.n1)).toEqual(['Pairs grow as n²', 'O(n²) memory', 'Quadratic memory'])
+  })
+  it('skips unsafe operations and never loses text', () => {
+    const detail = c!.children[0]!.id
+    const { study, ops } = applyTidy(grown, JSON.stringify({
+      merge: [{ keep: detail, drop: [c!.id] }, { keep: 'ghost', drop: [a!.id] }],
+      move: [{ id: c!.id, nodeId: 'n1', parentId: detail }, { id: a!.id, nodeId: 'zzz' }],
+      mergeNodes: [{ keep: 'n1', drop: 'n1' }],
+    }))
+    expect(ops).toBe(0)
+    expect(study.tree).toEqual(grown.tree)
+    expect(() => applyTidy(grown, '{"summary": "looks tidy"}')).toThrow('AI_INVALID_RESPONSE')
+    expect(applyTidy(grown, '{"result": {"merge": []}}').ops).toBe(0)
+  })
+  it('folds identical siblings and lifts bullets deeper than three levels', () => {
+    const pt = (id: string, children: StudyPoint[] = []): StudyPoint => ({ id, text: id, page: null, children })
+    const deep = applyTidy({ ...grown, tree: { ...grown.tree, n4: [pt('1', [pt('2', [pt('3', [pt('4', [pt('5')])])])])] } }, '{"move": []}')
+    expect(deep.study.tree.n4).toEqual([pt('1', [pt('2', [pt('3'), pt('4'), pt('5')])])])
+    const twins = applyTidy({ ...grown, tree: { ...grown.tree, n3: [{ id: 'x', text: 'Same.', page: 2, children: [] }, { id: 'y', text: 'same', page: null, children: [{ id: 'z', text: 'kid', page: null, children: [] }] }] } }, '{"merge": []}')
+    expect(twins.study.tree.n3).toEqual([{ id: 'x', text: 'Same.', page: 2, children: [{ id: 'z', text: 'kid', page: null, children: [] }] }])
+  })
+})
+
 describe('layoutStory', () => {
   it('stacks the flow in layers and sets back edges apart', () => {
     const study = parseStory(story, 'model')
@@ -145,4 +210,13 @@ it('exports the tree as Markdown', () => {
   expect(md).toContain('## Attention is quadratic（Problem）')
   expect(md).toContain('- O(n²) memory (p.1)')
   expect(md).toContain('→ addressed by LSH buckets')
+})
+
+it('finds the node and bullets that contain a point', () => {
+  const q = { text: 'Why?', askedAt: '2026-01-01T00:00:00Z', model: 'm' }
+  const study = applyAnswer(parseStory(story, 'm'), JSON.stringify({ nodeId: 'n1', points: [{ text: 'Pairs grow as n²', children: ['detail'] }] }), q).study
+  const parent = study.tree.n1!.at(-1)!, child = parent.children[0]!
+  expect([...ancestorsOf(study, [child.id])]).toEqual(['n1', parent.id])
+  expect([...ancestorsOf(study, [parent.id])]).toEqual(['n1'])
+  expect(ancestorsOf(study, ['missing']).size).toBe(0)
 })

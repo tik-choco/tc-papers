@@ -245,11 +245,18 @@ main.wide { padding-bottom: 0 }
 .tree li li li { color: color-mix(in srgb, var(--text) 82%, var(--muted)) }
 .node-head { display: flex; align-items: center; gap: .45rem; font-weight: 600; text-align: left }
 .node-head i { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--k) }
-.node-head small { color: var(--muted); font-weight: 400; font-size: .75rem }
 .pt { border-radius: 6px }
+.node-row { display: flex; align-items: center; gap: .2rem; margin-left: -.3rem }
+/* A branch trades its bullet for a chevron in the same spot. */
+.tree li.branch, .focus-points li.branch { list-style: none; position: relative }
+li.branch > .twisty { position: absolute; left: -1.2rem; top: .1rem }
+.twisty { flex: none; display: inline-grid; place-items: center; width: 1.1rem; height: 1.1rem; padding: 0; border-radius: 4px; color: var(--muted) }
+button.twisty:hover { color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent) }
+.fold-count { margin-left: .35rem; padding: 0 .35rem; border-radius: 6px; font-size: .72rem; color: var(--muted); background: color-mix(in srgb, var(--text) 7%, transparent); font-variant-numeric: tabular-nums }
+.fold-count:hover { color: var(--text) }
 .tree li.fresh > .pt { animation: glow 2.4s ease-out }
 @keyframes glow { from { background: color-mix(in srgb, var(--primary) 28%, transparent) } to { background: transparent } }
-.q-badge { display: inline-block; margin-right: .35rem; padding: 0 .35rem; border-radius: 6px; font-size: .7rem; font-weight: 700; color: var(--surface); background: var(--primary); vertical-align: 1px; cursor: help }
+.q-badge { display: inline-block; margin-right: .35rem; padding: 0 .3rem; border: 1px solid var(--border); border-radius: 5px; font-size: .68rem; font-weight: 600; line-height: 1.35; color: var(--muted); vertical-align: 1px; font-variant-numeric: tabular-nums; cursor: help }
 
 .ask { position: sticky; bottom: 0; margin-top: 1rem; padding: .75rem 0 1rem; background: linear-gradient(transparent, var(--bg) 18%) }
 .ask-row { display: flex; gap: .5rem; align-items: flex-end }

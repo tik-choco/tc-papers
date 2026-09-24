@@ -11,7 +11,9 @@ export function MathText({ text }: { text: string }) {
   const math = hasMath(text)
   const [ready, setReady] = useState(Boolean(render))
   useEffect(() => {
-    if (!math || render) return
+    if (!math) return
+    // Rendered before KaTeX arrived but mounted after: nothing left to wait for.
+    if (render) { setReady(true); return }
     let live = true
     void load().then(() => { if (live) setReady(true) })
     return () => { live = false }
