@@ -211,6 +211,12 @@ main.wide { padding-bottom: 0 }
 .edge.related path { stroke: var(--primary); stroke-width: 2.2 }
 .edge text { font-size: 11px; fill: var(--muted); paint-order: stroke; stroke: var(--surface); stroke-width: 4px }
 .edge.related text { fill: var(--text) }
+.edge path.edge-hit { stroke: transparent; stroke-width: 12; pointer-events: stroke }
+.edge.hot path:not(.edge-hit) { stroke: var(--muted); stroke-width: 2.2 }
+.edge.related.hot path:not(.edge-hit) { stroke: var(--primary) }
+.graph svg.edge-labels { pointer-events: none }
+.edge-labels text { font-size: 11px; font-weight: 600; fill: var(--text); paint-order: stroke; stroke: var(--surface); stroke-width: 6px }
+.edge-labels .fresh text { animation: label-glow 2.4s ease-out }
 .edge.fresh path { animation: edge-glow 2.4s ease-out }
 .edge.fresh text { animation: label-glow 2.4s ease-out }
 @keyframes edge-glow { from { stroke: var(--primary); stroke-width: 4 } }
