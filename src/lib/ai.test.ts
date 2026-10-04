@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createRoomConsumers, decode, encode, type MistNodeLike, type ProtocolMessage } from '@tik-choco/mistai'
 import { emptyLlmConfig, saveLlmConfig } from '@tik-choco/mistai/llm-config'
-import { aiConfigured, chat, loadAiPreferences, parseReview, resolveAiRoute, reviewPaper, saveAiPreferences, sharedConfig, streamingField } from './ai'
+import { aiConfigured, chat, loadAiPreferences, ocrPage, parseReview, resolveAiRoute, reviewPaper, saveAiPreferences, sharedConfig, streamingField } from './ai'
 
-const mocks = vi.hoisted(() => ({ requestChat: vi.fn(), stream: vi.fn() }))
+const mocks = vi.hoisted(() => ({ requestChat: vi.fn(), requestOpenAi: vi.fn(), stream: vi.fn() }))
 vi.mock('@tik-choco/mistai', async importOriginal => ({
   ...await importOriginal<typeof import('@tik-choco/mistai')>(),
   streamChatCompletion: mocks.stream,
 }))
-vi.mock('./mist', () => ({ rooms: { requestRoomChat: mocks.requestChat } }))
+vi.mock('./mist', () => ({ rooms: { requestRoomChat: mocks.requestChat, requestRoomOpenAi: mocks.requestOpenAi } }))
 const RESPONSE = JSON.stringify({
   title: 'Sparse attention', summary: 's', strengths: ['a'], weaknesses: ['b'], questions: [], fatalFlaws: [],
   criteria: { soundness: { score: 4, confidence: 2, rationale: 'r', evidence: [{ page: 1, quote: 'q' }] }, novelty: { score: 9 } },
@@ -81,8 +82,84 @@ describe('AI routing', () => {
     saveAiPreferences(prefs)
     mocks.requestChat.mockResolvedValue(RESPONSE)
     await reviewPaper('Paper text', 'ja')
-    expect(mocks.requestChat).toHaveBeenCalledWith('paper-room', expect.any(Array), 'raw-remote-model', undefined)
+    expect(mocks.requestChat).toHaveBeenCalledWith('paper-room', expect.any(Array), { model: 'raw-remote-model', reasoningEffort: 'none', onDelta: undefined })
     expect(mocks.stream).not.toHaveBeenCalled()
+  })
+  it.each(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const)('sends room effort %s on llm_request and streams deltas before completion', async reasoningEffort => {
+    configured()
+    const prefs = loadAiPreferences()
+    prefs.tasks.review = { ref: { providerId: 'network', model: 'raw-remote-model' }, reasoningEffort }
+    saveAiPreferences(prefs)
+    const sent: ProtocolMessage[] = [], seen: string[] = []
+    let event: Parameters<MistNodeLike['onEvent']>[0] = () => {}
+    const receive = (message: ProtocolMessage) => event(0, 'provider', encode(message))
+    const node: MistNodeLike = {
+      init: async () => {}, onEvent: handler => { event = handler }, joinRoom: () => {}, leaveRoom: () => {},
+      sendMessage(toId, payload) {
+        const message = decode(payload)
+        if (!message) return
+        sent.push(message)
+        if (message.type === 'consumer_hello' && toId === null) {
+          receive({ v: 1, type: 'provider_hello', models: ['raw-remote-model'], services: ['chat'] })
+        } else if (message.type === 'llm_request') {
+          receive({ v: 1, type: 'llm_response_chunk', id: message.id, delta: 'First', seq: 0 })
+          expect(seen).toEqual(['First'])
+          receive({ v: 1, type: 'llm_response_chunk', id: message.id, delta: ' second', seq: 1 })
+          expect(seen).toEqual(['First', 'First second'])
+          receive({ v: 1, type: 'llm_response_done', id: message.id })
+        }
+      },
+    }
+    const consumers = createRoomConsumers(() => node, { providerWaitTimeoutMs: 100, requestTimeoutMs: 100 })
+    mocks.requestChat.mockImplementationOnce(consumers.requestRoomChat)
+    try {
+      const messages = [{ role: 'user' as const, content: 'review' }]
+      await expect(chat('review', messages, full => seen.push(full))).resolves.toEqual({ text: 'First second', model: 'raw-remote-model' })
+      expect(mocks.requestChat).toHaveBeenCalledWith('paper-room', messages, { model: 'raw-remote-model', reasoningEffort, onDelta: expect.any(Function) })
+      expect(sent.find(message => message.type === 'llm_request')).toEqual({ v: 1, type: 'llm_request', id: expect.any(String), messages, model: 'raw-remote-model', reasoning_effort: reasoningEffort })
+      expect(mocks.requestOpenAi).not.toHaveBeenCalled()
+      expect(mocks.stream).not.toHaveBeenCalled()
+    } finally { consumers.disconnectRoom('paper-room') }
+  })
+  it('keeps text content parts on streaming room chat', async () => {
+    configured()
+    const prefs = loadAiPreferences()
+    prefs.tasks.study = { ref: { providerId: 'network', model: 'study-model' }, reasoningEffort: 'low' }
+    saveAiPreferences(prefs)
+    mocks.requestChat.mockResolvedValueOnce('answer')
+    await chat('study', [{ role: 'user', content: [{ type: 'text', text: 'one' }, { type: 'text', text: ' two' }] }])
+    expect(mocks.requestChat).toHaveBeenCalledWith('paper-room', [{ role: 'user', content: 'one two' }], { model: 'study-model', reasoningEffort: 'low', onDelta: undefined })
+    expect(mocks.requestOpenAi).not.toHaveBeenCalled()
+  })
+  it('uses the room tunnel for OCR image parts with the OCR task effort', async () => {
+    configured()
+    const prefs = loadAiPreferences()
+    prefs.tasks.ocr = { ref: { providerId: 'network', model: 'vision-model' }, reasoningEffort: 'none' }
+    prefs.tasks.review.reasoningEffort = 'high'
+    saveAiPreferences(prefs)
+    mocks.requestOpenAi.mockResolvedValueOnce({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: 'OCR text' } }] }) })
+    await expect(ocrPage('data:image/png;base64,a', 2)).resolves.toBe('OCR text')
+    expect(mocks.requestOpenAi).toHaveBeenCalledWith('paper-room', { path: '/chat/completions', method: 'POST', contentType: 'application/json', body: expect.any(String) })
+    const body = JSON.parse(mocks.requestOpenAi.mock.calls[0][1].body)
+    expect(body).toEqual({ model: 'vision-model', reasoning_effort: 'none', stream: false, messages: [{ role: 'user', content: [
+      { type: 'text', text: expect.stringContaining('page 2') },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,a', detail: 'high' } },
+    ] }] })
+    expect(mocks.requestChat).not.toHaveBeenCalled()
+    expect(mocks.stream).not.toHaveBeenCalled()
+  })
+  it.each([
+    { status: 503, body: 'unavailable', code: 'UPSTREAM_HTTP_ERROR' },
+    { status: 200, body: 'invalid JSON', code: 'UPSTREAM_BAD_RESPONSE' },
+    { status: 200, body: '{"choices":[]}', code: 'UPSTREAM_BAD_RESPONSE' },
+  ])('rejects unusable room vision responses: $status / $body', async ({ status, body, code }) => {
+    configured()
+    const prefs = loadAiPreferences()
+    prefs.tasks.ocr.ref = { providerId: 'network', model: 'vision-model' }
+    saveAiPreferences(prefs)
+    mocks.requestOpenAi.mockResolvedValueOnce({ status, body, contentType: 'application/json' })
+    await expect(ocrPage('data:image/png;base64,a', 1)).rejects.toMatchObject({ code })
+    expect(mocks.requestChat).not.toHaveBeenCalled()
   })
   it('resolves disabled or missing refs only through the default and leaves the ref intact', () => {
     configured()
@@ -122,6 +199,6 @@ describe('AI routing', () => {
     saveAiPreferences(prefs)
     await chat('review', [])
     await chat('study', [])
-    expect(mocks.requestChat.mock.calls.map(call => [call[0], call[2]])).toEqual([['paper-room', 'first'], ['second-room', 'second']])
+    expect(mocks.requestChat.mock.calls.map(call => [call[0], call[2].model])).toEqual([['paper-room', 'first'], ['second-room', 'second']])
   })
 })

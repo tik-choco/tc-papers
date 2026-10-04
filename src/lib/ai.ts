@@ -1,4 +1,4 @@
-import { streamChatCompletion, type ChatMessage } from '@tik-choco/mistai'
+import { MistaiError, streamChatCompletion, type ChatMessage } from '@tik-choco/mistai'
 import { emptyLlmConfig, loadLlmConfig, migrateSharedLlmConfig, saveLlmConfig, resolveModel, providerKind, roomIdFromBaseUrl, type SharedLlmConfigV1 } from '@tik-choco/mistai/llm-config'
 import { rooms } from './mist'
 import { loadAiPreferences as loadPreferences, type AiPreferences, type AiTask } from './aiPreferences'
@@ -35,15 +35,36 @@ type Part = { type: 'text'; text: string } | { type: 'image_url'; image_url: { u
 export async function chat(task: AiTask, messages: { role: ChatMessage['role']; content: string | Part[] }[], onText?: (full: string) => void): Promise<{ text: string; model: string }> {
   const config = sharedConfig(), preferences = loadAiPreferences()
   const route = resolveAiRoute(config, preferences, task)
+  const reasoningEffort = preferences.tasks[task].reasoningEffort
   const payload = messages as ChatMessage[]
   if (route.kind === 'network') {
     if (!route.roomId) throw new Error('AI_NOT_CONFIGURED')
-    return { text: await rooms.requestRoomChat(route.roomId, payload, route.model, onText && ((_: string, full: string) => onText(full))), model: route.model }
+    if (messages.some(message => Array.isArray(message.content) && message.content.some(part => part.type === 'image_url'))) {
+      const response = await rooms.requestRoomOpenAi(route.roomId, {
+        path: '/chat/completions', method: 'POST', contentType: 'application/json',
+        body: JSON.stringify({ model: route.model, messages, reasoning_effort: reasoningEffort, stream: false }),
+      })
+      if (response.status < 200 || response.status >= 300) {
+        throw new MistaiError('UPSTREAM_HTTP_ERROR', `LLM API returned an error (${response.status}): ${response.body.slice(0, 500)}`, { status: response.status })
+      }
+      let json
+      try { json = JSON.parse(response.body) } catch { /* Report malformed responses below. */ }
+      const text = json?.choices?.[0]?.message?.content
+      if (typeof text !== 'string') throw new MistaiError('UPSTREAM_BAD_RESPONSE', 'LLM API returned a response with an unexpected format')
+      onText?.(text)
+      return { text, model: route.model }
+    }
+    const textMessages = messages.map(message => ({
+      ...message, content: typeof message.content === 'string' ? message.content : message.content.map(part => part.type === 'text' ? part.text : '').join(''),
+    }))
+    return { text: await rooms.requestRoomChat(route.roomId, textMessages, {
+      model: route.model, reasoningEffort, onDelta: onText && ((_: string, full: string) => onText(full)),
+    }), model: route.model }
   }
   if (!route.target || !/^https?:\/\//i.test(route.target.baseUrl) || !route.target.model) throw new Error('AI_NOT_CONFIGURED')
   let full = ''
   const onDelta = onText ? (delta: string) => { full += delta; onText(full) } : undefined
-  const text = await streamChatCompletion({ ...route.target, reasoningEffort: preferences.tasks[task].reasoningEffort }, payload, onDelta, timedFetch)
+  const text = await streamChatCompletion({ ...route.target, reasoningEffort }, payload, onDelta, timedFetch)
   return { text, model: route.target.model }
 }
 
