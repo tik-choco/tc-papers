@@ -33,7 +33,7 @@ export const COPY = {
     howScored: '算出方法', formula: '各観点 1–5 を根拠の確認率で中立 (3) 側へ補正 → 重み付き平均を 0–100 に換算 (90%) + 構成チェック (10%) → 致命的欠陥などで上限。',
     pages: (scan: { pages: number; scannedPages: number; ocrPages: number; truncated: boolean }) => `${scan.pages} ページ` + (scan.truncated ? `（先頭 ${scan.scannedPages} ページを評価）` : '') + (scan.ocrPages ? ` · OCR ${scan.ocrPages} ページ` : ''),
     startReview: 'レビューを開始', notReviewed: 'まだレビューしていません。理解モードだけで使うこともできます。', rerun: '再レビュー', retry: '再試行', open: 'PDF を開く', remove: '削除', confirmRemove: 'もう一度押すと削除', copyMd: 'Markdown をコピー', copied: 'コピーしました',
-    duplicate: '登録済みの PDF です', aiSettings: 'AI 接続', aiNote: '「レビュー」と「OCR」に使うモデルを選べます。OCR には画像入力に対応したモデルが必要です。PDF 本文は選択した AI に送信されます。',
+    duplicate: '登録済みの PDF です',
     steps: { scan: '本文スキャン', review: 'AI 査読', score: '採点' },
     progress: {
       queued: '順番待ちです（1 本ずつ処理します）',
@@ -55,7 +55,6 @@ export const COPY = {
     history: '解析履歴', latest: '最新', historyNote: '再レビューしても以前の結果は履歴として残ります。',
     savedNote: '解析結果はこのブラウザーに保存され、tc-storage にも自動でバックアップされます。',
     toDark: 'ダークテーマに切り替え', toLight: 'ライトテーマに切り替え',
-    tasks: { review: 'レビュー', study: '理解モード（未選択ならレビューと同じ）', ocr: 'OCR（画像のみのページ）' },
     study: {
       tab: '理解モード', reviewTab: 'レビュー',
       lead: '論文のストーリー（背景 → 問題 → 手法 → 結果 …）をノードグラフにします。質問するたびに答えが理解ツリーに箇条書きで積み上がり、読み進めるほど理解が深まります。',
@@ -85,16 +84,11 @@ export const COPY = {
       note: '選んだ PDF は TC Papers にコピーされ、理解モードで開きます（tc-pdf-viewer 側は変更しません）。',
     },
     onboarding: {
-      label: 'はじめてのセットアップ', reopen: 'セットアップガイドを表示',
+      label: 'はじめてのセットアップ',
       welcome: 'TC Papers へようこそ！',
       intro: 'TC Papers は論文 PDF を AI で読み解くアプリです。査読者の観点でスコアを付ける「レビュー」と、論文のストーリーをグラフにして質問しながら理解を深める「理解モード」があります。PDF と結果はすべてこのブラウザーに保存されます。',
       introSetup: '準備は 1 つだけ：AI（LLM）の接続設定です。あとから設定画面でいつでも変更でき、スキップして PDF の追加から始めることもできます。',
       llmTitle: 'AI の接続設定（任意）',
-      llmLead: 'OpenAI 互換の API ならどれでも使えます（OpenAI、LM Studio、Ollama など）。ここで設定した接続は、他の tc アプリとも共有されます。',
-      baseUrl: 'ベース URL', apiKey: 'API キー（不要なら空欄）', model: 'モデル', modelPlaceholder: '例: gpt-4o-mini', fetchModels: 'モデル候補を取得',
-      test: '接続テスト', testing: '接続中…', testOk: '接続できました', testFailed: '接続に失敗しました',
-      testPrompt: '接続テストです。「OK」とだけ返してください。',
-      llmNote: 'AI Network（P2P で他の端末の AI を借りる）や、レビュー・理解モード・OCR ごとのモデル選択は設定画面から行えます。',
       doneTitle: '準備完了です！',
       features: {
         add: { name: 'PDF を追加', text: 'ドロップまたはファイル選択で追加すると、本文を自動でスキャンします' },
@@ -105,7 +99,7 @@ export const COPY = {
         backup: { name: 'バックアップ', text: '解析結果は tc-storage に自動でバックアップされます' },
       },
       doneNote: 'このガイドは設定画面からいつでも表示できます。',
-      back: '戻る', start: 'はじめる', saveNext: '保存して次へ', skip: 'スキップして次へ', finish: '完了',
+      back: '戻る', start: 'はじめる', finish: '完了',
     },
   },
   en: {
@@ -133,7 +127,7 @@ export const COPY = {
     howScored: 'How this is scored', formula: 'Each 1–5 criterion is pulled toward neutral (3) by the share of its quotes found in the paper → weighted mean mapped to 0–100 (90%) + structure check (10%) → caps for fatal flaws.',
     pages: (scan: { pages: number; scannedPages: number; ocrPages: number; truncated: boolean }) => `${scan.pages} pages` + (scan.truncated ? ` (first ${scan.scannedPages} reviewed)` : '') + (scan.ocrPages ? ` · OCR ${scan.ocrPages}` : ''),
     startReview: 'Start review', notReviewed: 'Not reviewed yet. You can also use it in understanding mode only.', rerun: 'Review again', retry: 'Retry', open: 'Open PDF', remove: 'Delete', confirmRemove: 'Click again to delete', copyMd: 'Copy Markdown', copied: 'Copied',
-    duplicate: 'Already added', aiSettings: 'AI connection', aiNote: 'Choose models for Review and OCR. OCR needs an image-capable model. PDF text is sent to the selected AI.',
+    duplicate: 'Already added',
     steps: { scan: 'Scan text', review: 'AI review', score: 'Score' },
     progress: {
       queued: 'Waiting in line (one paper at a time)',
@@ -155,7 +149,6 @@ export const COPY = {
     history: 'Review history', latest: 'Latest', historyNote: 'Earlier results are kept when you review again.',
     savedNote: 'Results are saved in this browser and backed up to tc-storage automatically.',
     toDark: 'Switch to dark theme', toLight: 'Switch to light theme',
-    tasks: { review: 'Review', study: 'Understanding mode (defaults to the review model)', ocr: 'OCR (image-only pages)' },
     study: {
       tab: 'Understand', reviewTab: 'Review',
       lead: 'Maps the story of the paper (background → problem → method → results …) as a node graph. Every question you ask adds its answer as bullets to your understanding tree, so it grows as you read.',
@@ -185,16 +178,11 @@ export const COPY = {
       note: 'The PDF is copied into TC Papers and opens in understanding mode (tc-pdf-viewer is not changed).',
     },
     onboarding: {
-      label: 'First-time setup', reopen: 'Show the setup guide',
+      label: 'First-time setup',
       welcome: 'Welcome to TC Papers!',
       intro: 'TC Papers helps you read research PDFs with AI. "Review" scores a paper the way a reviewer would, and "understanding mode" turns its story into a graph you can explore by asking questions. PDFs and results stay in this browser.',
       introSetup: 'There is just one thing to set up: the AI (LLM) connection. You can change it any time in Settings, or skip it and start by adding a PDF.',
       llmTitle: 'AI connection (optional)',
-      llmLead: 'Any OpenAI-compatible API works (OpenAI, LM Studio, Ollama, …). The connection is shared with the other tc apps.',
-      baseUrl: 'Base URL', apiKey: 'API key (leave blank if not needed)', model: 'Model', modelPlaceholder: 'e.g. gpt-4o-mini', fetchModels: 'Fetch available models',
-      test: 'Test connection', testing: 'Connecting…', testOk: 'Connected', testFailed: 'Connection failed',
-      testPrompt: 'This is a connection test. Reply with just "OK".',
-      llmNote: 'AI Network (borrow AI from other devices over P2P) and per-task models for review, understanding mode and OCR are in Settings.',
       doneTitle: "You're all set!",
       features: {
         add: { name: 'Add PDFs', text: 'drop or choose files and the text is scanned automatically' },
@@ -205,7 +193,7 @@ export const COPY = {
         backup: { name: 'Backup', text: 'results are backed up to tc-storage automatically' },
       },
       doneNote: 'You can open this guide again from Settings.',
-      back: 'Back', start: 'Get started', saveNext: 'Save and continue', skip: 'Skip for now', finish: 'Done',
+      back: 'Back', start: 'Get started', finish: 'Done',
     },
   },
 }

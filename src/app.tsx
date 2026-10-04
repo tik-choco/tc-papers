@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { FileUp, Library, Moon, Settings2, Sparkles, Sun, X } from 'lucide-preact'
+import { FileUp, Library, Moon, Settings2, Sun, X } from 'lucide-preact'
 import type { Paper } from './types'
 import { COPY, detectLocale } from './copy'
 import { loadPapers, mutatePapers, patchPaper, subscribePapers } from './lib/store'
@@ -13,7 +13,6 @@ import { ViewerPicker } from './components/ViewerPicker'
 import { PDF_VIEWER_INDEX_KEY } from './lib/pdfViewerLibrary'
 import { progressText } from './components/ProgressView'
 import { useTheme } from './hooks/useTheme'
-import { backdropClose } from './lib/backdrop'
 import { Onboarding } from './components/Onboarding'
 import { markOnboardingDone, shouldShowOnboarding } from './lib/onboarding'
 
@@ -37,7 +36,7 @@ export function App() {
   const [tick, setTick] = useState(0)
   const running = useRef(false)
   const fileRef = useRef<HTMLInputElement>(null)
-  const network = useAiNetwork()
+  const network = useAiNetwork(settings || onboarding)
   const { theme, toggleTheme } = useTheme()
 
   useEffect(() => { document.documentElement.lang = locale }, [locale])
@@ -48,12 +47,6 @@ export function App() {
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
   useEffect(() => { writeAppManifest({ app: 'tc-papers', version: '0.1.0', publishes: ['papers-backup'], consumes: [], reads: ['tc-shared-llm-config-v1', PDF_VIEWER_INDEX_KEY] }) }, [])
-  useEffect(() => {
-    if (!settings) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSettings(false) }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [settings])
   useEffect(() => {
     if (!notice) return
     const timer = setTimeout(() => setNotice(''), 4000)
@@ -171,13 +164,8 @@ export function App() {
     {dragging && <div class="drop-overlay"><FileUp size={40} strokeWidth={1.5} /><strong>{t.drop}</strong></div>}
     {notice && <div class="toast" role="alert"><span>{notice}</span><button class="icon" aria-label={t.close} onClick={() => setNotice('')}><X size={15} /></button></div>}
     {picker && <ViewerPicker t={t} onPick={importFromViewer} onClose={() => setPicker(false)} />}
-    {settings && <div class="modal-backdrop" {...backdropClose(() => setSettings(false))}>
-      <div class="modal" role="dialog" aria-modal="true" aria-label={t.settings}>
-        <div class="modal-head"><h2>{t.aiSettings}</h2><button class="icon" aria-label={t.close} onClick={() => setSettings(false)}><X size={18} /></button></div>
-        <AiSettings locale={locale} network={network} />
-        <div class="modal-foot"><button class="ghost" onClick={() => { setSettings(false); setOnboarding(true) }}><Sparkles size={15} />{t.onboarding.reopen}</button></div>
-      </div>
-    </div>}
+    {settings && <AiSettings locale={locale} network={network} onClose={() => setSettings(false)}
+      onSetup={() => { setSettings(false); setOnboarding(true) }} />}
     {onboarding && <Onboarding t={t} locale={locale} onClose={closeOnboarding} />}
   </div>
 }

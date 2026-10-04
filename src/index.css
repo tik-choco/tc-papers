@@ -5,6 +5,10 @@
   --k-background: #8a8f8b; --k-problem: #c0533f; --k-gap: #c67a2c; --k-claim: #9a6fb0; --k-method: #28684c; --k-experiment: #3f8a7a;
   --k-result: #3c6fa8; --k-limitation: #a8841f; --k-implication: #5a5fb0; --k-concept: #6b7770;
   --mistai-border: var(--border); --mistai-surface: var(--surface); --mistai-text: var(--text); --mistai-text-muted: var(--muted); --mistai-text-strong: var(--text); --mistai-primary: var(--primary);
+  --mistai-surface-2: var(--bg); --mistai-border-strong: color-mix(in srgb, var(--border), var(--text) 20%);
+  --mistai-primary-soft: color-mix(in srgb, var(--primary) 12%, var(--surface)); --mistai-focus: var(--primary);
+  --mistai-focus-ring: color-mix(in srgb, var(--primary) 25%, transparent); --mistai-danger-text: var(--danger);
+  --mistai-font-family: Inter, "Segoe UI", "Noto Sans JP", "Yu Gothic UI", sans-serif;
   font-family: Inter, "Segoe UI", "Noto Sans JP", "Yu Gothic UI", sans-serif; color: var(--text); background: var(--bg);
   -webkit-font-smoothing: antialiased; line-height: 1.6;
 }
@@ -135,11 +139,13 @@ main { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 4rem }
 
 .toast { position: fixed; left: 50%; bottom: 1.25rem; transform: translateX(-50%); display: flex; align-items: center; gap: .5rem; max-width: min(92vw, 640px); padding: .6rem .6rem .6rem 1rem; border-radius: 12px; background: var(--text); color: var(--bg); z-index: 30 }
 .toast .icon { color: inherit }
-.modal-backdrop { position: fixed; inset: 0; display: grid; place-items: center; padding: 1rem; background: #0006; z-index: 40 }
+.modal-backdrop { position: fixed; inset: 0; display: grid; place-items: center; padding: 1rem; background: #0006; z-index: 20 }
 .modal { width: min(720px, 100%); max-height: 90vh; overflow: auto; padding: 1.25rem; border-radius: 16px; background: var(--surface) }
 .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: .5rem }
 .modal-head h2 { font-size: 1.1rem }
-.ai-settings > .muted { margin-bottom: .75rem }
+.mistai-settings > .muted { margin-bottom: .75rem }
+.ob-card.ob-setup { width: min(780px, 100%) }
+.ob-setup .mistai-settings { width: 100%; max-height: none; padding: 0; box-shadow: none }
 .modal-foot { display: flex; justify-content: flex-end; margin-top: 1rem; padding-top: .75rem; border-top: 1px solid var(--border) }
 
 /* First-run onboarding wizard (components/Onboarding.tsx) */
@@ -155,16 +161,6 @@ main { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 4rem }
 .ob-step-head > svg { padding: .45rem }
 .ob-title { font-size: 1.25rem; text-align: center }
 .ob-step-head .ob-title { font-size: 1.1rem; text-align: left; color: var(--text) }
-.ob-field { display: flex; flex-direction: column; gap: .25rem }
-.ob-field > span { font-size: .85rem; font-weight: 600 }
-.ob-input { width: 100%; min-width: 0; padding: .5rem .7rem; border: 1px solid var(--border); border-radius: 10px; background: var(--bg) }
-.ob-input:focus { outline: 2px solid var(--primary); outline-offset: -1px; border-color: transparent }
-.ob-model-row { display: flex; align-items: center; gap: .35rem }
-.ob-model-row .ob-input { flex: 1 }
-.ob-test-row { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem }
-.ob-outline { border: 1px solid var(--border); color: var(--text) }
-.ob-ok { display: inline-flex; align-items: center; gap: .3rem; color: var(--d-strong); font-size: .9rem }
-.ob-body .error-text { margin: 0 }
 .ob-features { list-style: none; margin: 0; padding: 0; display: grid; gap: .7rem }
 .ob-features li { display: flex; align-items: flex-start; gap: .7rem; line-height: 1.6; font-size: .94rem }
 .ob-features li > svg { flex: none; box-sizing: content-box; padding: 6px; border-radius: 50%; color: var(--primary); background: color-mix(in srgb, var(--primary) 14%, transparent) }

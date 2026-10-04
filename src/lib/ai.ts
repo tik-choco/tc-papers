@@ -1,78 +1,31 @@
-import { ConsumerClient, streamChatCompletion, type ChatMessage } from '@tik-choco/mistai'
-import { emptyLlmConfig, loadLlmConfig, resolvePreset, isNetworkProviderBaseUrl, advertisedModelName, type SharedLlmConfigV1 } from '@tik-choco/mistai/llm-config'
-import { createNetworkNode, NETWORK_NODE_KEY } from './mist'
-export { createNetworkNode } from './mist'
+import { streamChatCompletion, type ChatMessage } from '@tik-choco/mistai'
+import { emptyLlmConfig, loadLlmConfig, migrateSharedLlmConfig, saveLlmConfig, resolveModel, providerKind, roomIdFromBaseUrl, type SharedLlmConfigV1 } from '@tik-choco/mistai/llm-config'
+import { rooms } from './mist'
+import { loadAiPreferences as loadPreferences, type AiPreferences, type AiTask } from './aiPreferences'
+export { saveAiPreferences } from './aiPreferences'
+export type { AiPreferences, AiTask } from './aiPreferences'
 import { CRITERIA } from './score'
 import { extractJson, unwrap } from './json'
 import { MATH_RULE } from './math'
 import type { CriterionId, CriterionRating, ReviewComment, ReviewResult } from '../types'
 import type { Locale } from '../copy'
 
-export type AiTask = 'review' | 'ocr' | 'study'
-export interface AiPreferences {
-  mode: 'api' | 'network'
-  providerEnabled: boolean
-  sharedPresetIds: string[]
-  tasks: Record<AiTask, string>
-  reasoning: 'none' | 'minimal' | 'low' | 'medium' | 'high'
+export function sharedConfig() {
+  const config = loadLlmConfig() ?? emptyLlmConfig()
+  if (migrateSharedLlmConfig(config).changed) saveLlmConfig(config)
+  return config
 }
-const KEY = 'tc-papers:ai-v1'
-export function loadAiPreferences(): AiPreferences {
-  let value: Partial<AiPreferences> = {}
-  try { value = JSON.parse(localStorage.getItem(KEY) || '{}') || {} } catch { /* use defaults */ }
-  const task = (key: AiTask) => typeof value.tasks?.[key] === 'string' ? value.tasks[key] : ''
-  return {
-    mode: value.mode === 'network' ? 'network' : 'api',
-    providerEnabled: value.providerEnabled === true,
-    sharedPresetIds: Array.isArray(value.sharedPresetIds) ? value.sharedPresetIds.filter(id => typeof id === 'string') : [],
-    tasks: { review: task('review'), ocr: task('ocr'), study: task('study') },
-    reasoning: ['none', 'minimal', 'low', 'medium', 'high'].includes(value.reasoning || '') ? value.reasoning! : 'none',
-  }
-}
-export function saveAiPreferences(value: AiPreferences) { localStorage.setItem(KEY, JSON.stringify(value)) }
-
-class PapersConsumer extends ConsumerClient {
-  roomId = ''
-  override connect(roomId: string) {
-    this.roomId = roomId.trim()
-    return super.connect(roomId)
-  }
-  override requestChat(roomId: string, messages: ChatMessage[], options?: Parameters<ConsumerClient['requestChat']>[2]) {
-    this.roomId = roomId.trim()
-    return super.requestChat(roomId, messages, options)
-  }
-  override disconnect() { this.roomId = ''; super.disconnect() }
-}
-export const consumer = new PapersConsumer({ createNode: createNetworkNode, nodeIdStorageKey: NETWORK_NODE_KEY, providerWaitTimeoutMs: 20_000, requestTimeoutMs: 180_000 })
-export function sharedConfig() { return loadLlmConfig() || emptyLlmConfig() }
+export function loadAiPreferences() { return loadPreferences(sharedConfig()) }
 export function resolveAiRoute(config: SharedLlmConfigV1, preferences: AiPreferences, task: AiTask) {
-  // Understanding mode uses the review model unless one is picked for it.
-  const selected = resolvePreset(config, preferences.tasks[task] || (task === 'study' ? preferences.tasks.review : ''))
-  if (selected && isNetworkProviderBaseUrl(selected.baseUrl)) {
-    return { kind: 'network' as const, roomId: selected.baseUrl.slice('mist-network://'.length).trim(), model: selected.model }
+  const selected = resolveModel(config, preferences.tasks[task].ref)
+  if (selected && providerKind(selected) === 'room') {
+    return { kind: 'network' as const, roomId: roomIdFromBaseUrl(selected.baseUrl), model: selected.model }
   }
-  if (preferences.mode === 'network') return { kind: 'network' as const, roomId: config.network.roomId.trim(), model: undefined }
   return { kind: 'api' as const, target: selected }
 }
 export function aiConfigured(task: AiTask): boolean {
   const route = resolveAiRoute(sharedConfig(), loadAiPreferences(), task)
   return route.kind === 'network' ? Boolean(route.roomId) : Boolean(route.target && /^https?:\/\//i.test(route.target.baseUrl) && route.target.model)
-}
-export function sharedTargets(config: SharedLlmConfigV1, preferences: AiPreferences) {
-  return preferences.sharedPresetIds.flatMap(id => {
-    // resolvePreset falls back to default for missing IDs, which is never permission to share it.
-    if (!config.presets.some(p => p.id === id)) return []
-    const target = resolvePreset(config, id)
-    return target && /^https?:\/\//i.test(target.baseUrl) && target.model ? [target] : []
-  })
-}
-export async function provideChat(messages: ChatMessage[], model: string | undefined, onDelta: (delta: string) => void) {
-  const preferences = loadAiPreferences()
-  if (!preferences.providerEnabled) throw new Error('Provider disabled')
-  const targets = sharedTargets(sharedConfig(), preferences)
-  const target = model ? targets.find(item => advertisedModelName(item) === model) : targets[0]
-  if (!target) throw new Error('The requested model is not shared by this provider.')
-  return streamChatCompletion(target, messages, onDelta, timedFetch)
 }
 const timedFetch: typeof fetch = (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(180_000) })
 
@@ -85,13 +38,12 @@ export async function chat(task: AiTask, messages: { role: ChatMessage['role']; 
   const payload = messages as ChatMessage[]
   if (route.kind === 'network') {
     if (!route.roomId) throw new Error('AI_NOT_CONFIGURED')
-    const options = onText ? { model: route.model, onDelta: (_: string, full: string) => onText(full) } : { model: route.model }
-    return { text: await consumer.requestChat(route.roomId, payload, options), model: route.model || 'AI Network' }
+    return { text: await rooms.requestRoomChat(route.roomId, payload, route.model, onText && ((_: string, full: string) => onText(full))), model: route.model }
   }
   if (!route.target || !/^https?:\/\//i.test(route.target.baseUrl) || !route.target.model) throw new Error('AI_NOT_CONFIGURED')
   let full = ''
   const onDelta = onText ? (delta: string) => { full += delta; onText(full) } : undefined
-  const text = await streamChatCompletion({ ...route.target, reasoningEffort: route.target.reasoningEffort ?? preferences.reasoning }, payload, onDelta, timedFetch)
+  const text = await streamChatCompletion({ ...route.target, reasoningEffort: preferences.tasks[task].reasoningEffort }, payload, onDelta, timedFetch)
   return { text, model: route.target.model }
 }
 

@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { emptyLlmConfig, saveLlmConfig } from '@tik-choco/mistai/llm-config'
-import { aiConfigured, consumer, loadAiPreferences, parseReview, provideChat, resolveAiRoute, reviewPaper, saveAiPreferences, sharedTargets, streamingField } from './ai'
+import { aiConfigured, chat, loadAiPreferences, parseReview, resolveAiRoute, reviewPaper, saveAiPreferences, sharedConfig, streamingField } from './ai'
 
 const mocks = vi.hoisted(() => ({ requestChat: vi.fn(), stream: vi.fn() }))
-vi.mock('@tik-choco/mistai', () => ({
-  ConsumerClient: class { requestChat(...args: unknown[]) { return mocks.requestChat(...args) } connect() {} disconnect() {} },
-  createSharedNodeScope: (fn: unknown) => fn,
+vi.mock('@tik-choco/mistai', async importOriginal => ({
+  ...await importOriginal<typeof import('@tik-choco/mistai')>(),
   streamChatCompletion: mocks.stream,
 }))
+vi.mock('./mist', () => ({ rooms: { requestRoomChat: mocks.requestChat } }))
 const RESPONSE = JSON.stringify({
   title: 'Sparse attention', summary: 's', strengths: ['a'], weaknesses: ['b'], questions: [], fatalFlaws: [],
   criteria: { soundness: { score: 4, confidence: 2, rationale: 'r', evidence: [{ page: 1, quote: 'q' }] }, novelty: { score: 9 } },
@@ -74,17 +74,24 @@ describe('AI routing', () => {
     await reviewPaper('[Page 1]\nPaper text', 'en', (chars, field) => seen.push([chars, field]))
     expect(seen).toEqual([[38, 'soundness'], [42, 'soundness']])
   })
-  it('routes a network preset to its own room with the advertised model', async () => {
-    const config = configured(); config.defaultPresetId = 'remote'; saveLlmConfig(config)
+  it('routes a chosen room ref to its own room using the raw model id', async () => {
+    configured()
+    const prefs = loadAiPreferences()
+    prefs.tasks.review.ref = { providerId: 'network', model: 'raw-remote-model' }
+    saveAiPreferences(prefs)
     mocks.requestChat.mockResolvedValue(RESPONSE)
     await reviewPaper('Paper text', 'ja')
-    expect(consumer.roomId).toBe('paper-room')
-    expect(mocks.requestChat).toHaveBeenCalledWith('paper-room', expect.any(Array), { model: 'Advertised model name' })
+    expect(mocks.requestChat).toHaveBeenCalledWith('paper-room', expect.any(Array), 'raw-remote-model', undefined)
     expect(mocks.stream).not.toHaveBeenCalled()
   })
-  it('uses the shared room in network auto mode', () => {
-    const config = configured()
-    expect(resolveAiRoute(config, { ...loadAiPreferences(), mode: 'network' }, 'review')).toEqual({ kind: 'network', roomId: 'shared-room', model: undefined })
+  it('resolves disabled or missing refs only through the default and leaves the ref intact', () => {
+    configured()
+    const config = sharedConfig(), prefs = loadAiPreferences()
+    prefs.tasks.review.ref = { providerId: 'missing', model: 'unavailable' }
+    expect(resolveAiRoute(config, prefs, 'review')).toMatchObject({ kind: 'api', target: { model: 'upstream-model' } })
+    config.providers[0].enabled = false
+    expect(resolveAiRoute(config, prefs, 'review')).toEqual({ kind: 'api', target: null })
+    expect(prefs.tasks.review.ref).toEqual({ providerId: 'missing', model: 'unavailable' })
   })
   it('reports configuration state and rejects empty text', async () => {
     expect(aiConfigured('review')).toBe(false)
@@ -93,11 +100,28 @@ describe('AI routing', () => {
     expect(aiConfigured('review')).toBe(true)
     await expect(reviewPaper('[Page 1]\n', 'en')).rejects.toThrow('AI_NO_TEXT')
   })
-  it('never exposes unselected or network presets as a provider', async () => {
-    const config = configured()
-    const prefs = { ...loadAiPreferences(), providerEnabled: true, sharedPresetIds: ['missing', 'remote'] }
-    expect(sharedTargets(config, prefs)).toEqual([])
+  it('uses independent reasoning efforts for chat and vision without temperature', async () => {
+    configured()
+    const prefs = loadAiPreferences()
+    prefs.tasks.review.reasoningEffort = 'high'
+    prefs.tasks.ocr.reasoningEffort = 'none'
     saveAiPreferences(prefs)
-    await expect(provideChat([], 'Direct', () => {})).rejects.toThrow('not shared')
+    await chat('review', [{ role: 'user', content: 'review' }])
+    await chat('ocr', [{ role: 'user', content: [{ type: 'image_url', image_url: { url: 'data:image/png;base64,a', detail: 'high' } }] }])
+    expect(mocks.stream.mock.calls[0][0].reasoningEffort).toBe('high')
+    expect(mocks.stream.mock.calls[1][0].reasoningEffort).toBe('none')
+    expect(mocks.stream.mock.calls.every(call => !('temperature' in call[0]))).toBe(true)
+  })
+  it('routes tasks to different rooms without a single-room singleton', async () => {
+    const config = configured()
+    config.providers.push({ id: 'other-room', label: 'Other room', baseUrl: 'mist-network://second-room', apiKey: '' })
+    saveLlmConfig(config)
+    const prefs = loadAiPreferences()
+    prefs.tasks.review.ref = { providerId: 'network', model: 'first' }
+    prefs.tasks.study.ref = { providerId: 'other-room', model: 'second' }
+    saveAiPreferences(prefs)
+    await chat('review', [])
+    await chat('study', [])
+    expect(mocks.requestChat.mock.calls.map(call => [call[0], call[2]])).toEqual([['paper-room', 'first'], ['second-room', 'second']])
   })
 })
