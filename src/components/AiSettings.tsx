@@ -40,6 +40,7 @@ export function AiSettings({ locale, network, onClose, onSetup }: {
   }, [onClose])
   return <LlmSettings locale={lang} title={t.title} onClose={onClose}
     localSettings={network.localSettings}
+    voice={{ tts: {} }}
     headerSection={<><p class="muted">{t.note}</p>{network.error && <p role="alert" class="error-text">{t.storageError}</p>}</>}
     extraSections={<div class="modal-foot"><button class="ghost" onClick={onSetup}><Sparkles size={15} />{t.reopen}</button></div>}
     tasks={(['review', 'study', 'ocr'] as const).map(id => ({ id, label: t[id], reasoning: true }))} />

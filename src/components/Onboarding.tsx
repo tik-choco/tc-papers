@@ -32,7 +32,7 @@ export function Onboarding({ t: copy, locale, onClose }: { t: Copy; locale: Loca
       {step === 1 && <div class="ob-body">
         <div class="ob-step-head"><Cpu size={20} /><h2 class="ob-title">{t.llmTitle}</h2></div>
         <p class="muted">{ai.note}</p>
-        <LlmSettings locale={lang} localSettings={localSettings}
+        <LlmSettings locale={lang} localSettings={localSettings} voice={{ tts: {} }}
           tasks={(['review', 'study', 'ocr'] as const).map(id => ({ id, label: ai[id], reasoning: true }))} />
       </div>}
       {step === 2 && <div class="ob-body">
