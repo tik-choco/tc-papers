@@ -11,3 +11,5 @@ dist/
 public/pdfjs/
 playwright-report/
 test-results/
+
+.mistlib-examples-src/

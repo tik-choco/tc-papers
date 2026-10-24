@@ -11,11 +11,12 @@
     "test": "vitest run",
     "predev": "node scripts/prepare-pdf-assets.mjs",
     "prebuild": "node scripts/prepare-pdf-assets.mjs",
+    "fetch-mistlib": "node scripts/fetch-mistlib.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {
     "@tik-choco/mistai": "github:tik-choco-lab/mistai",
-    "@tik-choco/mistlib": "0.6.4",
+    "@tik-choco/mistlib": "0.6.6",
     "katex": "^0.18.7",
     "lucide-preact": "^0.577.0",
     "pdfjs-dist": "5.4.296",
