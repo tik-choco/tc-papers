@@ -165,7 +165,8 @@ test('reviews are backed up to tc-storage through the real mistlib CID store', a
   await expect.poll(() => page.evaluate(() => localStorage.getItem('tc-shared-papers-backup-v1')), { timeout: 15_000 }).toContain('"cid"')
   const size = await page.evaluate(async () => {
     const record = JSON.parse(localStorage.getItem('tc-shared-papers-backup-v1')!)
-    const lib = await import('/src/vendor/mistlib/index.js')
+    // Vite resolves the npm package for this browser-evaluated import.
+    const lib = await import('/@id/@tik-choco/mistlib-web')
     return (await lib.storage_get(record.meta.item.cid)).byteLength
   })
   expect(size).toBeGreaterThan(100)

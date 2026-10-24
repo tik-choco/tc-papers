@@ -20,6 +20,8 @@ Uses the shared mistai settings of the tc apps: any OpenAI-compatible API, or AI
 
 ## Development
 
+The mistlib web wrapper is installed from npm as `@tik-choco/mistlib-web`.
+
 ```sh
 npm install
 npm run dev

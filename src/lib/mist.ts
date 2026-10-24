@@ -1,5 +1,5 @@
 import { createRoomConsumers, createSharedNodeScope, getPersistentNodeId } from '@tik-choco/mistai'
-import { MistNode } from '../vendor/mistlib/index.js'
+import { MistNode } from '@tik-choco/mistlib-web'
 import { mistSignalingConfig } from './mistSignaling'
 
 export const NETWORK_NODE_KEY = 'tc-papers:network-node-v1'

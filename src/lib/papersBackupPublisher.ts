@@ -39,7 +39,7 @@
 
 import { loadPapers, subscribePapers } from "./store";
 import { publishShared } from "./sharedBus";
-import { storage_add } from "../vendor/mistlib/index.js";
+import { storage_add } from "@tik-choco/mistlib-web";
 import { ensureMistStorage } from "./mist";
 import type { Paper } from "../types";
 

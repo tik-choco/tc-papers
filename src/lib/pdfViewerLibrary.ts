@@ -1,6 +1,6 @@
 // Read-only access to tc-pdf-viewer's PDF library on the same origin (pull-type, contract:
 // protocol/docs/data-contracts/docs/keys/tc-pdf-viewer.md `mist_files_index`). tc-papers never writes it.
-import { storage_get } from '../vendor/mistlib/index.js'
+import { storage_get } from '@tik-choco/mistlib-web'
 import { readAppManifest } from './appManifest'
 import { ensureMistStorage } from './mist'
 

@@ -330,7 +330,8 @@ test('PDFs from tc-pdf-viewer can be picked and open in understanding mode', asy
   const bytes = [...pdfFixture('From the viewer')]
   await page.evaluate(async data => {
     const mist = await import('/src/lib/mist.ts')
-    const lib = await import('/src/vendor/mistlib/index.js')
+    // Vite resolves the npm package for this browser-evaluated import.
+    const lib = await import('/@id/@tik-choco/mistlib-web')
     await mist.ensureMistStorage()
     const cid = await lib.storage_add('viewer.pdf', new Uint8Array(data))
     localStorage.setItem('mist_files_index', JSON.stringify([{ name: 'viewer.pdf', cid, folder: 'Research', createdAt: 1, updatedAt: 2 }, { broken: true }]))
