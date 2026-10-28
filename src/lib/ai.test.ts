@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createRoomConsumers, decode, encode, type MistNodeLike, type ProtocolMessage } from '@tik-choco/mistai'
+import { createRoomConsumers, decode, encode, EVENT_RAW, type MistNodeLike, type ProtocolMessage } from '@tik-choco/mistai'
 import { emptyLlmConfig, saveLlmConfig } from '@tik-choco/mistai/llm-config'
 import { aiConfigured, chat, loadAiPreferences, ocrPage, parseReview, resolveAiRoute, reviewPaper, saveAiPreferences, sharedConfig, streamingField } from './ai'
 
@@ -92,7 +92,7 @@ describe('AI routing', () => {
     saveAiPreferences(prefs)
     const sent: ProtocolMessage[] = [], seen: string[] = []
     let event: Parameters<MistNodeLike['onEvent']>[0] = () => {}
-    const receive = (message: ProtocolMessage) => event(0, 'provider', encode(message))
+    const receive = (message: ProtocolMessage) => event(EVENT_RAW, 'provider', encode(message))
     const node: MistNodeLike = {
       init: async () => {}, onEvent: handler => { event = handler }, joinRoom: () => {}, leaveRoom: () => {},
       sendMessage(toId, payload) {
